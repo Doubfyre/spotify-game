@@ -10,7 +10,7 @@ type Section = {
 };
 
 const INTRO =
-  "Guessing the most popular artists in the world is easy. We all know everyone listens to Taylor Swift. The real challenge is finding the artists sitting right at the edge — popular enough to make the top 500, but only just. That's where the points are and that's our game.";
+  "Guessing the most popular artists in the world is easy. We all know everyone listens to Taylor Swift. The real challenge is finding the artists sitting right at the edge - popular enough to make the top 500, but only just. That's where the points are and that's our game.";
 
 const SECTIONS: Section[] = [
   {
@@ -21,17 +21,17 @@ const SECTIONS: Section[] = [
   {
     num: "02",
     title: "SOLO PLAY",
-    body: "Five rounds. Each round, type an artist you think is in today's top 500. Your score is their rank — so rank #487 is worth 487 points. The closer to #500, the better. Miss the top 500 entirely and you score zero. Highest total after five rounds wins.",
+    body: "Five rounds. Each round, type an artist you think is in today's top 500. Your score is their rank - so rank #487 is worth 487 points. The closer to #500, the better. Miss the top 500 entirely and you score zero. Highest total after five rounds wins.",
   },
   {
     num: "03",
     title: "DAILY CHALLENGE",
-    body: "Three artists, one at a time. You know their name — but not their rank. Guess where they sit in the top 500. Your score is how far off you are across all three guesses. If the answer is #312 and you guess #280, that's 32 points. Lower is better. One shot per day, resets at midnight.",
+    body: "Three artists, one at a time. You know their name - but not their rank. Guess where they sit in the top 500. Your score is how far off you are across all three guesses. If the answer is #312 and you guess #280, that's 32 points. Lower is better. One shot per day, resets at midnight.",
   },
   {
     num: "04",
     title: "PARTY MODE",
-    body: "Two to eight players. Pass & Play uses one device — take turns and hand the phone over. Online gives everyone their own device via a room code. Once an artist is guessed, they're gone for the rest of the party. Highest cumulative score wins.",
+    body: "Two to eight players. Pass & Play uses one device - take turns and hand the phone over. Online gives everyone their own device via a room code. Once an artist is guessed, they're gone for the rest of the party. Highest cumulative score wins.",
   },
 ];
 
