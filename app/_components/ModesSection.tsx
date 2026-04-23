@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { msUntilLondonMidnight } from "@/lib/dates";
+import { getTodayLondon, msUntilLondonMidnight } from "@/lib/dates";
 
 type ModalAction = { label: string; href: string };
 
@@ -113,7 +113,7 @@ export default function ModesSection({
             />
           ))}
         </div>
-        <PlayerCountLine todaySnapshot={todaySnapshot} />
+        <PlayerCountLine />
       </div>
 
       {openMode && (
@@ -334,22 +334,40 @@ function PartyVisual() {
 // Live player count (Supabase count query, refreshed every 60s)
 // ------------------------------------------------------------
 
-function PlayerCountLine({ todaySnapshot }: { todaySnapshot: string }) {
+function PlayerCountLine() {
   const [count, setCount] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const { count: n, error } = await supabase
+      // Recompute "today" in London on every poll so the counter rolls over
+      // at midnight UK even when a tab has been left open past midnight.
+      const todayLondon = getTodayLondon();
+
+      // PostgREST doesn't expose COUNT(DISTINCT …), so we fetch the two
+      // identity columns for today's rows and dedupe client-side. Daily
+      // submission volume is small (thousands of rows at most) so the extra
+      // bytes beat an RPC + migration.
+      const { data, error } = await supabase
         .from("daily_scores")
-        .select("*", { count: "exact", head: true })
-        .eq("snapshot_date", todaySnapshot);
+        .select("user_id, player_name")
+        .eq("snapshot_date", todayLondon);
       if (cancelled) return;
       if (error) {
         setCount(null);
         return;
       }
-      setCount(n ?? 0);
+      const unique = new Set<string>();
+      for (const row of (data ?? []) as Array<{
+        user_id: string | null;
+        player_name: string | null;
+      }>) {
+        // Prefer user_id (stable across name changes); fall back to
+        // player_name for anonymous submissions.
+        const key = row.user_id ?? row.player_name;
+        if (key) unique.add(String(key));
+      }
+      setCount(unique.size);
     }
     load();
     const id = setInterval(load, 60_000);
@@ -357,7 +375,7 @@ function PlayerCountLine({ todaySnapshot }: { todaySnapshot: string }) {
       cancelled = true;
       clearInterval(id);
     };
-  }, [todaySnapshot]);
+  }, []);
 
   // Hide the whole line when we don't have something useful to say.
   if (count === null || count <= 0) return <div className="h-4" aria-hidden />;
