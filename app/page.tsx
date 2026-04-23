@@ -14,7 +14,7 @@ type FloatNum = {
 };
 const FLOATING_NUMBERS: FloatNum[] = [
   { n: "500", left: "4%", size: 90, dur: 22, delay: -5 },
-  { n: "487", left: "12%", size: 140, dur: 28, delay: -12 },
+  { n: "342", left: "12%", size: 140, dur: 28, delay: -12 },
   { n: "312", left: "22%", size: 70, dur: 18, delay: -20 },
   { n: "245", left: "30%", size: 110, dur: 24, delay: -8 },
   { n: "178", left: "40%", size: 85, dur: 30, delay: -16 },
