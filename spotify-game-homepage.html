@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Spotify Game</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,700;1,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --black: #0a0a0a;
+    --off-black: #111111;
+    --card-bg: #161616;
+    --border: #2a2a2a;
+    --white: #f5f5f0;
+    --muted: #888;
+    --green: #1fdf64;
+    --green-dim: #0f6e32;
+    --amber: #f5a623;
+    --red: #ff4444;
+    --rank-gold: #ffd700;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--black);
+    color: var(--white);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    overflow-x: hidden;
+    cursor: default;
+  }
+
+  /* NOISE OVERLAY */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.4;
+  }
+
+  /* NAV */
+  nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    padding: 20px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(to bottom, rgba(10,10,10,0.95) 0%, transparent 100%);
+    backdrop-filter: blur(2px);
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 4px;
+    color: var(--white);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .logo-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--green);
+    border-radius: 50%;
+    display: inline-block;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .nav-link {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    transition: color 0.2s;
+  }
+
+  .nav-link:hover { color: var(--white); }
+
+  .btn-nav {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--white);
+    padding: 9px 20px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+    letter-spacing: 0.3px;
+  }
+
+  .btn-nav:hover {
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  .btn-nav-filled {
+    background: var(--green);
+    border-color: var(--green);
+    color: var(--black);
+  }
+
+  .btn-nav-filled:hover {
+    background: #25f070;
+    border-color: #25f070;
+    color: var(--black);
+  }
+
+  /* HERO */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 120px 40px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 70% 50%, rgba(31,223,100,0.07) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 60% at 20% 80%, rgba(245,166,35,0.05) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 80% 20%, rgba(31,223,100,0.04) 0%, transparent 60%);
+  }
+
+  /* Animated rank numbers in background */
+  .bg-numbers {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .bg-num {
+    position: absolute;
+    font-family: 'Bebas Neue', sans-serif;
+    color: rgba(255,255,255,0.025);
+    animation: floatUp linear infinite;
+    user-select: none;
+  }
+
+  @keyframes floatUp {
+    0% { transform: translateY(110vh); opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { transform: translateY(-10vh); opacity: 0; }
+  }
+
+  .hero-content {
+    position: relative;
+    z-index: 2;
+    max-width: 900px;
+  }
+
+  .hero-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 28px;
+  }
+
+  .hero-eyebrow-line {
+    width: 32px;
+    height: 1px;
+    background: var(--green);
+  }
+
+  .hero-eyebrow-text {
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--green);
+    font-weight: 500;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .hero-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(80px, 14vw, 180px);
+    line-height: 0.9;
+    letter-spacing: 2px;
+    margin-bottom: 16px;
+    color: var(--white);
+  }
+
+  .hero-title span {
+    color: var(--green);
+    display: inline-block;
+  }
+
+  .hero-subtitle {
+    font-size: clamp(16px, 2vw, 22px);
+    font-weight: 300;
+    color: var(--muted);
+    max-width: 500px;
+    line-height: 1.5;
+    margin-bottom: 48px;
+  }
+
+  .hero-subtitle strong {
+    color: var(--white);
+    font-weight: 500;
+  }
+
+  .hero-cta {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary {
+    background: var(--green);
+    color: var(--black);
+    border: none;
+    padding: 16px 36px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-primary:hover {
+    background: #25f070;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 32px rgba(31,223,100,0.3);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--white);
+    border: 1px solid var(--border);
+    padding: 16px 36px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 400;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+    text-decoration: none;
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--white);
+    transform: translateY(-1px);
+  }
+
+  .hero-stat-row {
+    position: absolute;
+    bottom: 40px;
+    left: 40px;
+    right: 40px;
+    display: flex;
+    gap: 40px;
+    z-index: 2;
+    border-top: 1px solid var(--border);
+    padding-top: 24px;
+  }
+
+  .hero-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .hero-stat-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px;
+    letter-spacing: 2px;
+    color: var(--white);
+    line-height: 1;
+  }
+
+  .hero-stat-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  /* SECTION */
+  section {
+    padding: 100px 40px;
+    position: relative;
+  }
+
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--green);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-label::before {
+    content: '';
+    width: 24px;
+    height: 1px;
+    background: var(--green);
+  }
+
+  /* MODES */
+  .modes-section {
+    background: var(--off-black);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .modes-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 56px;
+  }
+
+  .modes-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(40px, 6vw, 72px);
+    letter-spacing: 2px;
+    line-height: 1;
+  }
+
+  .modes-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+  }
+
+  .mode-card {
+    background: var(--card-bg);
+    padding: 40px;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid transparent;
+  }
+
+  .mode-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(31,223,100,0.05) 0%, transparent 60%);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .mode-card:hover {
+    border-color: var(--green);
+    transform: translateY(-2px);
+  }
+
+  .mode-card:hover::before { opacity: 1; }
+
+  .mode-number {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 72px;
+    color: rgba(255,255,255,0.06);
+    line-height: 1;
+    margin-bottom: 16px;
+    transition: color 0.3s;
+  }
+
+  .mode-card:hover .mode-number {
+    color: rgba(31,223,100,0.15);
+  }
+
+  .mode-icon {
+    font-size: 28px;
+    margin-bottom: 20px;
+    display: block;
+  }
+
+  .mode-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px;
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+    color: var(--white);
+  }
+
+  .mode-desc {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 28px;
+  }
+
+  .mode-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    transition: all 0.3s;
+  }
+
+  .mode-card:hover .mode-tag {
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  .mode-tag-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* DAILY CHALLENGE PREVIEW */
+  .daily-section {
+    background: var(--black);
+  }
+
+  .daily-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 80px;
+    align-items: center;
+  }
+
+  .daily-copy h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(40px, 5vw, 64px);
+    letter-spacing: 2px;
+    line-height: 1;
+    margin-bottom: 20px;
+  }
+
+  .daily-copy p {
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.7;
+    margin-bottom: 32px;
+  }
+
+  .daily-mock {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 32px;
+    position: relative;
+  }
+
+  .daily-mock-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .daily-mock-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 3px;
+    color: var(--green);
+  }
+
+  .daily-mock-date {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .daily-round {
+    margin-bottom: 24px;
+  }
+
+  .daily-round-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .daily-artist-name {
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--white);
+    margin-bottom: 14px;
+  }
+
+  .daily-input-mock {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .rank-input {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 16px;
+    color: var(--white);
+    font-family: 'DM Mono', monospace;
+    font-size: 18px;
+    width: 100px;
+    text-align: center;
+    letter-spacing: 2px;
+  }
+
+  .rank-input.answered {
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  .rank-result {
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .rank-diff {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+  }
+
+  .rank-diff.good { color: var(--green); }
+  .rank-diff.ok { color: var(--amber); }
+  .rank-diff.bad { color: var(--red); }
+
+  .daily-score-bar {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .daily-score-label {
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .daily-score-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 40px;
+    letter-spacing: 2px;
+    color: var(--green);
+  }
+
+  /* HOW IT WORKS */
+  .how-section {
+    background: var(--off-black);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .how-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+    margin-top: 56px;
+  }
+
+  .how-step {
+    background: var(--card-bg);
+    padding: 36px;
+    position: relative;
+  }
+
+  .how-step-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 80px;
+    color: rgba(31,223,100,0.12);
+    line-height: 1;
+    margin-bottom: 20px;
+  }
+
+  .how-step-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--white);
+    margin-bottom: 10px;
+  }
+
+  .how-step-desc {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .how-connector {
+    position: absolute;
+    top: 36px;
+    right: -12px;
+    width: 24px;
+    height: 1px;
+    background: var(--border);
+    z-index: 1;
+  }
+
+  /* LEADERBOARD PREVIEW */
+  .leaderboard-section { background: var(--black); }
+
+  .leaderboard-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 80px;
+    align-items: start;
+  }
+
+  .leaderboard-copy h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(40px, 5vw, 64px);
+    letter-spacing: 2px;
+    line-height: 1;
+    margin-bottom: 20px;
+  }
+
+  .leaderboard-copy p {
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.7;
+  }
+
+  .leaderboard-mock {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .lb-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .lb-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 3px;
+    color: var(--white);
+  }
+
+  .lb-date {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .lb-row {
+    display: flex;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid rgba(42,42,42,0.5);
+    gap: 16px;
+    transition: background 0.2s;
+  }
+
+  .lb-row:hover { background: rgba(255,255,255,0.02); }
+
+  .lb-row:last-child { border-bottom: none; }
+
+  .lb-pos {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 1px;
+    width: 28px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .lb-pos.gold { color: var(--rank-gold); }
+  .lb-pos.silver { color: #c0c0c0; }
+  .lb-pos.bronze { color: #cd7f32; }
+
+  .lb-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--black);
+  }
+
+  .lb-name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--white);
+  }
+
+  .lb-score {
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .lb-score.top { color: var(--green); }
+
+  .lb-bar-wrap {
+    width: 80px;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .lb-bar {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--green);
+    transition: width 1s ease;
+  }
+
+  /* SHARE CARD */
+  .share-section {
+    background: var(--off-black);
+    border-top: 1px solid var(--border);
+  }
+
+  .share-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 80px;
+    align-items: center;
+  }
+
+  .share-copy h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(40px, 5vw, 64px);
+    letter-spacing: 2px;
+    line-height: 1;
+    margin-bottom: 20px;
+  }
+
+  .share-copy p {
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.7;
+  }
+
+  .share-card-mock {
+    background: var(--black);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    max-width: 360px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .sc-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 4px;
+    color: var(--green);
+    margin-bottom: 4px;
+  }
+
+  .sc-subtitle {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+
+  .sc-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+
+  .sc-label { color: var(--muted); }
+
+  .sc-blocks {
+    display: flex;
+    gap: 4px;
+  }
+
+  .sc-block {
+    width: 28px;
+    height: 28px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .sc-block.green { background: rgba(31,223,100,0.2); color: var(--green); border: 1px solid var(--green-dim); }
+  .sc-block.amber { background: rgba(245,166,35,0.15); color: var(--amber); border: 1px solid rgba(245,166,35,0.3); }
+  .sc-block.red { background: rgba(255,68,68,0.15); color: var(--red); border: 1px solid rgba(255,68,68,0.3); }
+
+  .sc-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 16px 0;
+  }
+
+  .sc-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .sc-total-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .sc-total-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 36px;
+    letter-spacing: 2px;
+    color: var(--green);
+  }
+
+  .sc-url {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: rgba(136,136,136,0.5);
+    text-transform: uppercase;
+  }
+
+  /* PARTY SECTION */
+  .party-section { background: var(--black); }
+
+  .party-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 80px;
+    align-items: center;
+  }
+
+  .party-copy h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(40px, 5vw, 64px);
+    letter-spacing: 2px;
+    line-height: 1;
+    margin-bottom: 20px;
+  }
+
+  .party-copy p {
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.7;
+    margin-bottom: 32px;
+  }
+
+  .party-mock {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 32px;
+  }
+
+  .party-room-code {
+    text-align: center;
+    margin-bottom: 28px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .prc-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .prc-code {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 52px;
+    letter-spacing: 12px;
+    color: var(--white);
+    line-height: 1;
+  }
+
+  .party-players {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .party-player {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+
+  .pp-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--black);
+    flex-shrink: 0;
+  }
+
+  .pp-name {
+    flex: 1;
+    font-size: 14px;
+    color: var(--white);
+  }
+
+  .pp-status {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--green);
+  }
+
+  .pp-status.waiting { color: var(--muted); }
+
+  .party-start-btn {
+    width: 100%;
+    margin-top: 20px;
+    background: var(--green);
+    color: var(--black);
+    border: none;
+    padding: 14px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 3px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .party-start-btn:hover {
+    background: #25f070;
+    transform: translateY(-1px);
+  }
+
+  /* FOOTER */
+  footer {
+    background: var(--off-black);
+    border-top: 1px solid var(--border);
+    padding: 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 4px;
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 28px;
+  }
+
+  .footer-link {
+    font-size: 12px;
+    color: var(--muted);
+    text-decoration: none;
+    letter-spacing: 0.5px;
+    transition: color 0.2s;
+  }
+
+  .footer-link:hover { color: var(--white); }
+
+  .footer-copy {
+    font-size: 12px;
+    color: rgba(136,136,136,0.4);
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.5px;
+  }
+
+  /* TICKER */
+  .ticker {
+    background: var(--green);
+    color: var(--black);
+    padding: 10px 0;
+    overflow: hidden;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ticker-inner {
+    display: flex;
+    animation: ticker 30s linear infinite;
+    white-space: nowrap;
+  }
+
+  .ticker-item {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 14px;
+    letter-spacing: 3px;
+    padding: 0 32px;
+    opacity: 0.8;
+    flex-shrink: 0;
+  }
+
+  .ticker-dot {
+    opacity: 0.4;
+    padding: 0 8px;
+  }
+
+  @keyframes ticker {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  /* ANIMATIONS */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--black); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  @media (max-width: 768px) {
+    nav { padding: 16px 20px; }
+    .nav-link { display: none; }
+    .hero { padding: 100px 20px 100px; }
+    .hero-stat-row { display: none; }
+    section { padding: 60px 20px; }
+    .modes-grid { grid-template-columns: 1fr; }
+    .daily-inner, .leaderboard-inner, .share-inner, .party-inner { grid-template-columns: 1fr; gap: 40px; }
+    .how-grid { grid-template-columns: 1fr 1fr; }
+    footer { flex-direction: column; gap: 24px; text-align: center; }
+    .footer-links { flex-wrap: wrap; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="logo">
+    <span class="logo-dot"></span>
+    THE SPOTIFY GAME
+  </a>
+  <div class="nav-right">
+    <a href="#modes" class="nav-link">Game Modes</a>
+    <a href="#how" class="nav-link">How to Play</a>
+    <a href="#leaderboard" class="nav-link">Leaderboard</a>
+    <button class="btn-nav">Log In</button>
+    <button class="btn-nav btn-nav-filled">Sign Up Free</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+
+  <div class="bg-numbers" id="bgNumbers"></div>
+
+  <div class="hero-content">
+    <div class="hero-eyebrow">
+      <span class="hero-eyebrow-line"></span>
+      <span class="hero-eyebrow-text">The Spotify Ranking Game</span>
+    </div>
+
+    <h1 class="hero-title">
+      THE<br>SPOTIFY<br><span>GAME</span>
+    </h1>
+
+    <p class="hero-subtitle">
+      <strong>Don't aim for number one.</strong> Guess which artists are hiding near the edge of Spotify's top 500 - and get as close as you can.
+    </p>
+
+    <div class="hero-cta">
+      <a href="#" class="btn-primary">
+        Play Today's Challenge
+        <span>→</span>
+      </a>
+      <a href="#modes" class="btn-secondary">See All Modes</a>
+    </div>
+  </div>
+
+  <div class="hero-stat-row">
+    <div class="hero-stat">
+      <span class="hero-stat-num">500</span>
+      <span class="hero-stat-label">Artists Ranked Daily</span>
+    </div>
+    <div class="hero-stat">
+      <span class="hero-stat-num">3</span>
+      <span class="hero-stat-label">Game Modes</span>
+    </div>
+    <div class="hero-stat">
+      <span class="hero-stat-num">5</span>
+      <span class="hero-stat-label">Rounds per Game</span>
+    </div>
+    <div class="hero-stat">
+      <span class="hero-stat-num">24H</span>
+      <span class="hero-stat-label">Daily Reset</span>
+    </div>
+  </div>
+</section>
+
+<!-- TICKER -->
+<div class="ticker">
+  <div class="ticker-inner" id="ticker"></div>
+</div>
+
+<!-- MODES -->
+<section class="modes-section" id="modes">
+  <div class="modes-header fade-in">
+    <div>
+      <div class="section-label">Game Modes</div>
+      <h2 class="modes-title">THREE WAYS<br>TO PLAY</h2>
+    </div>
+  </div>
+
+  <div class="modes-grid">
+    <div class="mode-card fade-in">
+      <div class="mode-number">01</div>
+      <span class="mode-icon">🎯</span>
+      <div class="mode-name">Solo Play</div>
+      <p class="mode-desc">Five rounds. Pick artists you think are in the top 500. Your score is their rank - highest cumulative score across five rounds wins. The closer to 500, the better.</p>
+      <span class="mode-tag"><span class="mode-tag-dot"></span>No account needed</span>
+    </div>
+
+    <div class="mode-card fade-in" style="transition-delay: 0.1s">
+      <div class="mode-number">02</div>
+      <span class="mode-icon">📅</span>
+      <div class="mode-name">Daily Challenge</div>
+      <p class="mode-desc">Three mystery artists revealed each day. Guess their exact rank in the top 500. Your score is the total distance from the correct answers. Lowest score wins. One attempt, everyone plays the same puzzle.</p>
+      <span class="mode-tag"><span class="mode-tag-dot"></span>Resets at midnight</span>
+    </div>
+
+    <div class="mode-card fade-in" style="transition-delay: 0.2s">
+      <div class="mode-number">03</div>
+      <span class="mode-icon">🎉</span>
+      <div class="mode-name">Party Mode</div>
+      <p class="mode-desc">Play live with friends - in the same room or online. Create a room, share the code, take turns across five rounds. Works on one screen or every player's phone.</p>
+      <span class="mode-tag"><span class="mode-tag-dot"></span>Up to 8 players</span>
+    </div>
+  </div>
+</section>
+
+<!-- DAILY CHALLENGE PREVIEW -->
+<section class="daily-section">
+  <div class="daily-inner">
+    <div class="daily-copy fade-in">
+      <div class="section-label">Daily Challenge</div>
+      <h2>GUESS THE<br>RANK</h2>
+      <p>Three artists. You know their name. Can you guess where they sit in Spotify's top 500? Your total distance from the correct answers is your score. Get it under 50 and you're elite.</p>
+      <a href="#" class="btn-primary">Play Today →</a>
+    </div>
+
+    <div class="daily-mock fade-in" style="transition-delay: 0.15s">
+      <div class="daily-mock-header">
+        <span class="daily-mock-title">DAILY CHALLENGE</span>
+        <span class="daily-mock-date">23 APR 2026</span>
+      </div>
+
+      <!-- Round 1 - answered -->
+      <div class="daily-round">
+        <div class="daily-round-label">Artist 01 / 03</div>
+        <div class="daily-artist-name">Doja Cat</div>
+        <div class="daily-input-mock">
+          <input class="rank-input answered" value="187" readonly>
+          <div class="rank-result">
+            Actual: 204 — <span class="rank-diff good">17 off</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Round 2 - answered -->
+      <div class="daily-round">
+        <div class="daily-round-label">Artist 02 / 03</div>
+        <div class="daily-artist-name">Imagine Dragons</div>
+        <div class="daily-input-mock">
+          <input class="rank-input answered" value="320" readonly>
+          <div class="rank-result">
+            Actual: 378 — <span class="rank-diff ok">58 off</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Round 3 - active -->
+      <div class="daily-round">
+        <div class="daily-round-label">Artist 03 / 03</div>
+        <div class="daily-artist-name">Anitta</div>
+        <div class="daily-input-mock">
+          <input class="rank-input" placeholder="1–500" style="animation: blink 1s step-end infinite;">
+          <div class="rank-result" style="color: rgba(136,136,136,0.4);">Your guess</div>
+        </div>
+      </div>
+
+      <div class="daily-score-bar">
+        <span class="daily-score-label">Score so far</span>
+        <span class="daily-score-val">75</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-section" id="how">
+  <div class="section-label fade-in">How It Works</div>
+  <h2 class="modes-title fade-in">THE RULES<br>ARE SIMPLE</h2>
+
+  <div class="how-grid">
+    <div class="how-step fade-in">
+      <div class="how-step-num">1</div>
+      <div class="how-step-title">Spotify ranks artists daily</div>
+      <p class="how-step-desc">Every day, Spotify updates each artist's position based on monthly listeners. The top 500 show on their profile. Position 501 disappears.</p>
+    </div>
+
+    <div class="how-step fade-in" style="transition-delay: 0.1s">
+      <div class="how-step-num">2</div>
+      <div class="how-step-title">You want to find the edge</div>
+      <p class="how-step-desc">In solo play, you're not chasing number one - you want artists sitting as close to position 500 as possible. Obvious picks score low.</p>
+    </div>
+
+    <div class="how-step fade-in" style="transition-delay: 0.2s">
+      <div class="how-step-num">3</div>
+      <div class="how-step-title">Daily challenge tests accuracy</div>
+      <p class="how-step-desc">Three mystery artists are revealed. You guess their exact rank. The closer you get, the lower your score. Think golf, not football.</p>
+    </div>
+
+    <div class="how-step fade-in" style="transition-delay: 0.3s">
+      <div class="how-step-num">4</div>
+      <div class="how-step-title">Share your result</div>
+      <p class="how-step-desc">Every game ends with a shareable result card showing how you did - without spoiling the artists for anyone who hasn't played yet.</p>
+    </div>
+  </div>
+</section>
+
+<!-- LEADERBOARD -->
+<section class="leaderboard-section" id="leaderboard">
+  <div class="leaderboard-inner">
+    <div class="leaderboard-copy fade-in">
+      <div class="section-label">Leaderboard</div>
+      <h2>WHO KNOWS<br>THE LIST</h2>
+      <p>Daily rankings reset at midnight. No account needed to play, but sign up to save your score and appear on the board. The top 10 stay up until the next challenge drops.</p>
+    </div>
+
+    <div class="leaderboard-mock fade-in" style="transition-delay: 0.15s">
+      <div class="lb-header">
+        <span class="lb-title">TODAY'S TOP 10</span>
+        <span class="lb-date">23 APR 2026 — DAILY CHALLENGE</span>
+      </div>
+
+      <div class="lb-row">
+        <span class="lb-pos gold">1</span>
+        <div class="lb-avatar" style="background: #1fdf64;">J</div>
+        <span class="lb-name">jackn</span>
+        <div class="lb-bar-wrap"><div class="lb-bar" style="width: 95%;"></div></div>
+        <span class="lb-score top">12</span>
+      </div>
+
+      <div class="lb-row">
+        <span class="lb-pos silver">2</span>
+        <div class="lb-avatar" style="background: #f5a623;">M</div>
+        <span class="lb-name">musicnerdd</span>
+        <div class="lb-bar-wrap"><div class="lb-bar" style="width: 80%;"></div></div>
+        <span class="lb-score top">28</span>
+      </div>
+
+      <div class="lb-row">
+        <span class="lb-pos bronze">3</span>
+        <div class="lb-avatar" style="background: #a855f7;">S</div>
+        <span class="lb-name">spotifysam</span>
+        <div class="lb-bar-wrap"><div class="lb-bar" style="width: 68%;"></div></div>
+        <span class="lb-score top">41</span>
+      </div>
+
+      <div class="lb-row">
+        <span class="lb-pos">4</span>
+        <div class="lb-avatar" style="background: #3b82f6;">R</div>
+        <span class="lb-name">r_charts</span>
+        <div class="lb-bar-wrap"><div class="lb-bar" style="width: 55%; background: var(--muted);"></div></div>
+        <span class="lb-score" style="color: var(--muted);">67</span>
+      </div>
+
+      <div class="lb-row">
+        <span class="lb-pos">5</span>
+        <div class="lb-avatar" style="background: #ef4444;">T</div>
+        <span class="lb-name">top500fan</span>
+        <div class="lb-bar-wrap"><div class="lb-bar" style="width: 40%; background: var(--muted);"></div></div>
+        <span class="lb-score" style="color: var(--muted);">89</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SHARE CARD -->
+<section class="share-section">
+  <div class="share-inner">
+    <div class="share-copy fade-in">
+      <div class="section-label">Share Your Score</div>
+      <h2>BRAG<br>WITHOUT<br>SPOILING</h2>
+      <p>Every result generates a shareable card showing how close you got - using colour blocks instead of artist names. Your friends see your score, not the answers.</p>
+    </div>
+
+    <div style="display: flex; justify-content: center;" class="fade-in" style="transition-delay: 0.15s">
+      <div class="share-card-mock">
+        <div class="sc-logo">THE SPOTIFY GAME</div>
+        <div class="sc-subtitle">Daily Challenge — 23 Apr 2026</div>
+
+        <div class="sc-row">
+          <span class="sc-label">Artist 1</span>
+          <div class="sc-blocks">
+            <div class="sc-block green">17</div>
+          </div>
+        </div>
+
+        <div class="sc-row">
+          <span class="sc-label">Artist 2</span>
+          <div class="sc-blocks">
+            <div class="sc-block amber">58</div>
+          </div>
+        </div>
+
+        <div class="sc-row">
+          <span class="sc-label">Artist 3</span>
+          <div class="sc-blocks">
+            <div class="sc-block red">142</div>
+          </div>
+        </div>
+
+        <div class="sc-divider"></div>
+
+        <div class="sc-total">
+          <span class="sc-total-label">Total Score</span>
+          <span class="sc-total-val">217</span>
+        </div>
+
+        <div class="sc-url">thespotifygame.com</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PARTY MODE -->
+<section class="party-section">
+  <div class="party-inner">
+    <div class="party-copy fade-in">
+      <div class="section-label">Party Mode</div>
+      <h2>PLAY WITH<br>FRIENDS</h2>
+      <p>Create a room, share the code. Up to 8 players, in person or online. Take turns across five rounds, scores tallied live. Works on one screen or every player's own device.</p>
+      <a href="#" class="btn-primary">Create a Room →</a>
+    </div>
+
+    <div class="party-mock fade-in" style="transition-delay: 0.15s">
+      <div class="party-room-code">
+        <div class="prc-label">Room Code</div>
+        <div class="prc-code">MX7K</div>
+      </div>
+
+      <div class="party-players">
+        <div class="party-player">
+          <div class="pp-avatar" style="background: #1fdf64;">J</div>
+          <span class="pp-name">jackn <span style="font-size: 11px; color: var(--green); margin-left: 6px;">HOST</span></span>
+          <span class="pp-status">Ready</span>
+        </div>
+        <div class="party-player">
+          <div class="pp-avatar" style="background: #f5a623;">W</div>
+          <span class="pp-name">willyo</span>
+          <span class="pp-status">Ready</span>
+        </div>
+        <div class="party-player">
+          <div class="pp-avatar" style="background: #3b82f6;">S</div>
+          <span class="pp-name">stevek</span>
+          <span class="pp-status waiting">Waiting...</span>
+        </div>
+        <div class="party-player" style="border-style: dashed; opacity: 0.4;">
+          <div class="pp-avatar" style="background: var(--border); color: var(--muted);">+</div>
+          <span class="pp-name" style="color: var(--muted);">Waiting for players...</span>
+        </div>
+      </div>
+
+      <button class="party-start-btn">START GAME</button>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">
+    <span class="logo-dot"></span>
+    THE SPOTIFY GAME
+  </div>
+  <div class="footer-links">
+    <a href="#" class="footer-link">How to Play</a>
+    <a href="#" class="footer-link">Leaderboard</a>
+    <a href="#" class="footer-link">Privacy</a>
+    <a href="#" class="footer-link">Terms</a>
+    <a href="#" class="footer-link">Contact</a>
+  </div>
+  <span class="footer-copy">© 2026 THE SPOTIFY GAME</span>
+</footer>
+
+<script>
+  // Background floating numbers
+  const bgNumbers = document.getElementById('bgNumbers');
+  const nums = ['500','499','487','312','245','178','401','356','89','467','23','499'];
+  nums.forEach((n, i) => {
+    const el = document.createElement('div');
+    el.className = 'bg-num';
+    el.textContent = n;
+    el.style.left = (5 + (i * 9)) + '%';
+    el.style.fontSize = (60 + Math.random() * 80) + 'px';
+    el.style.animationDuration = (15 + Math.random() * 20) + 's';
+    el.style.animationDelay = (Math.random() * -25) + 's';
+    bgNumbers.appendChild(el);
+  });
+
+  // Ticker
+  const ticker = document.getElementById('ticker');
+  const artists = ['TAYLOR SWIFT', 'DRAKE', 'THE WEEKND', 'BAD BUNNY', 'DOJA CAT', 'IMAGINE DRAGONS', 'ANITTA', 'ED SHEERAN', 'BILLIE EILISH', 'POST MALONE', 'KENDRICK LAMAR', 'SZA', 'ARCTIC MONKEYS', 'SABRINA CARPENTER'];
+  const tickerContent = [...artists, ...artists].map(a => `<span class="ticker-item">${a}</span><span class="ticker-item ticker-dot">·</span>`).join('');
+  ticker.innerHTML = tickerContent + tickerContent;
+
+  // Scroll fade-in
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>
