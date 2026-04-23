@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ModesSection from "./_components/ModesSection";
 
 // Deterministic floating-number config. Hardcoded (not Math.random()) so the
 // server-rendered markup matches the client render — avoids a hydration mismatch.
@@ -48,47 +49,12 @@ const STATS = [
   { num: "24H", label: "Daily Reset" },
 ];
 
-type Mode = {
-  num: string;
-  icon: string;
-  name: string;
-  desc: string;
-  tag: string;
-  href?: string;
-};
-const MODES: Mode[] = [
-  {
-    num: "01",
-    icon: "🎯",
-    name: "Solo Play",
-    desc: "Five rounds. Pick artists you think are in the top 500. Your score is their rank — highest cumulative score across five rounds wins.",
-    tag: "No account needed",
-    href: "/solo",
-  },
-  {
-    num: "02",
-    icon: "📅",
-    name: "Daily Challenge",
-    desc: "Three artists revealed each day. Guess their rank in the top 500. Lowest score wins — one attempt, everyone plays the same puzzle.",
-    tag: "Live daily",
-    href: "/daily",
-  },
-  {
-    num: "03",
-    icon: "🎉",
-    name: "Party Mode",
-    desc: "Play with friends — pass one device around or create a live online room. Up to 8 players, take turns across five rounds.",
-    tag: "2–8 players",
-    href: "/party",
-  },
-];
-
 export default function Home() {
   return (
     <main className="flex-1">
       <Hero />
       <Ticker />
-      <Modes />
+      <ModesSection />
     </main>
   );
 }
@@ -221,87 +187,3 @@ function Ticker() {
   );
 }
 
-function Modes() {
-  return (
-    <section
-      id="modes"
-      className="relative bg-off-black border-t border-b border-border py-24 px-5 sm:px-10"
-    >
-      <div className="mb-14">
-        <div className="flex items-center gap-[10px] font-mono text-[11px] tracking-[3px] uppercase text-spotify font-medium mb-4">
-          <span className="w-6 h-px bg-spotify" />
-          Game Modes
-        </div>
-        <h2
-          className="font-display tracking-[2px] leading-none"
-          style={{ fontSize: "clamp(40px, 6vw, 72px)" }}
-        >
-          THREE WAYS
-          <br />
-          TO PLAY
-        </h2>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-[2px]">
-        {MODES.map((mode) => (
-          <ModeCard key={mode.num} mode={mode} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ModeCard({ mode }: { mode: Mode }) {
-  const active = Boolean(mode.href);
-
-  const inner = (
-    <article
-      className={`group relative bg-surface p-10 border border-transparent transition overflow-hidden
-        ${active ? "hover:border-spotify hover:-translate-y-0.5 cursor-pointer" : "opacity-90"}`}
-    >
-      {/* hover gradient wash */}
-      {active && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(31,223,100,0.05) 0%, transparent 60%)",
-          }}
-        />
-      )}
-
-      <div className="relative">
-        <div
-          className={`font-display leading-none text-[72px] mb-4 transition-colors
-            ${active ? "text-white/[0.06] group-hover:text-spotify/15" : "text-white/[0.06]"}`}
-        >
-          {mode.num}
-        </div>
-        <span className="block text-[28px] mb-5" aria-hidden>
-          {mode.icon}
-        </span>
-        <div className="font-display text-[32px] tracking-[2px] mb-3 text-foreground">
-          {mode.name}
-        </div>
-        <p className="text-[14px] text-muted leading-[1.6] mb-7">
-          {mode.desc}
-        </p>
-        <span
-          className={`inline-flex items-center gap-[6px] font-mono text-[10px] tracking-[2px] uppercase px-[10px] py-[5px] rounded-sm border transition
-            ${active ? "border-border text-muted group-hover:border-spotify group-hover:text-spotify" : "border-border text-muted"}`}
-        >
-          <span className="w-[5px] h-[5px] rounded-full bg-current" />
-          {mode.tag}
-        </span>
-      </div>
-    </article>
-  );
-
-  if (!active) return inner;
-  return (
-    <Link href={mode.href!} className="block">
-      {inner}
-    </Link>
-  );
-}
