@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, createBrowserSupabase } from "@/lib/supabase";
 
 export type ArtistPick = { rank: number; artist_name: string };
 
@@ -339,6 +339,27 @@ function Results({
 
   const submittedAs = completed.submittedAs;
   const playerScore = completed.total;
+
+  // Pre-fill the leaderboard name from the logged-in user's profile if they
+  // have one. Anonymous players just see the empty input. We don't force the
+  // value — the input stays editable either way. Only runs when the submit
+  // form is visible (!submittedAs).
+  useEffect(() => {
+    if (submittedAs) return;
+    let cancelled = false;
+    const authClient = createBrowserSupabase();
+    authClient.auth.getUser().then(({ data: { user } }) => {
+      if (cancelled || !user) return;
+      const meta = user.user_metadata ?? {};
+      const source =
+        meta.full_name ?? meta.name ?? user.email?.split("@")[0] ?? "";
+      const prefill = String(source).trim().slice(0, 20);
+      if (prefill) setName((prev) => (prev ? prev : prefill));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [submittedAs]);
 
   // Fires on mount, on submit, and every LEADERBOARD_POLL_MS. Runs up to
   // three queries in parallel:
