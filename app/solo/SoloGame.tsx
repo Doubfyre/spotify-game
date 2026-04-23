@@ -6,9 +6,10 @@ import type { ArtistRow } from "@/lib/supabase";
 import { fuzzyFind } from "@/lib/fuzzy";
 
 const TOTAL_ROUNDS = 5;
-// Perfect game = picking rank 500 five times (ignoring the "already picked"
-// constraint, which is why this is a theoretical ceiling the reference).
-const MAX_POSSIBLE = TOTAL_ROUNDS * 500;
+// Perfect game = the five highest-scoring picks, i.e. ranks 500, 499, 498,
+// 497, 496. Ranks are unique (one artist per position) so you can't pick
+// 500 five times; this is the real achievable ceiling.
+const MAX_POSSIBLE = 500 + 499 + 498 + 497 + 496; // 2490
 
 type Pick = {
   round: number;
