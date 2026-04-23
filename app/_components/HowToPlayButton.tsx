@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type Section = {
   num: string;
@@ -55,6 +56,17 @@ export default function HowToPlayButton() {
 function HowToPlayModal({ onClose }: { onClose: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
+  // Portal target isn't available until we're in the browser. Delay
+  // rendering until after mount — critical because this component lives
+  // under <nav>, which has `backdrop-filter: blur(2px)`. That CSS property
+  // turns the nav into a containing block for any `position: fixed`
+  // descendants, which would otherwise trap the modal inside the nav's
+  // ~68px strip at the top of the page. Portaling to document.body
+  // bypasses the trap entirely.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Escape closes
   useEffect(() => {
@@ -76,8 +88,8 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
 
   // Move focus inside the modal on open so Tab/Escape land naturally
   useEffect(() => {
-    closeBtnRef.current?.focus();
-  }, []);
+    if (mounted) closeBtnRef.current?.focus();
+  }, [mounted]);
 
   function onOverlayClick(e: React.MouseEvent) {
     if (!panelRef.current) return;
@@ -86,7 +98,9 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -153,6 +167,7 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
           </ol>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
