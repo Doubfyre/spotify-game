@@ -1,7 +1,9 @@
-// Daily Challenge — 3 seeded artist picks per UTC day.
+// Daily Challenge — 3 seeded artist picks per UTC day, with a 90-day cooldown
+// so the same artist doesn't come up twice in a quarter.
 //
-// Required Supabase table. Run this in the SQL editor:
+// Required Supabase tables. Run this in the SQL editor:
 //
+//   -- Per-day submitted scores (for the leaderboard)
 //   create table public.daily_scores (
 //     id            uuid primary key default gen_random_uuid(),
 //     snapshot_date date not null,
@@ -9,25 +11,44 @@
 //     score         int  not null check (score >= 0),
 //     created_at    timestamptz not null default now()
 //   );
-//
 //   create index daily_scores_date_score_idx
 //     on public.daily_scores (snapshot_date, score asc);
-//
-//   -- Grants (service_role already has ALL via Supabase defaults; make sure
-//   -- anon + authenticated can read and insert):
 //   grant select, insert on table public.daily_scores to anon, authenticated;
 //   grant all          on table public.daily_scores to service_role;
-//
-//   -- RLS:
 //   alter table public.daily_scores enable row level security;
 //   create policy "public read"   on public.daily_scores for select using (true);
 //   create policy "public insert" on public.daily_scores for insert with check (true);
+//
+//   -- Artists already used in a daily challenge (cooldown ledger).
+//   -- unique(spotify_id, used_on) lets the server safely re-insert on
+//   -- repeat renders via Prefer: resolution=ignore-duplicates.
+//   create table public.used_artists (
+//     id          uuid primary key default gen_random_uuid(),
+//     spotify_id  text not null,
+//     artist_name text not null,
+//     used_on     date not null,
+//     created_at  timestamptz not null default now(),
+//     unique (spotify_id, used_on)
+//   );
+//   create index used_artists_used_on_idx    on public.used_artists (used_on desc);
+//   create index used_artists_spotify_id_idx on public.used_artists (spotify_id);
+//
+//   -- Reads are fine from the browser (nothing sensitive). Writes are
+//   -- server-only via SUPABASE_SERVICE_ROLE_KEY — no public insert policy,
+//   -- otherwise any visitor could poison the cooldown ledger.
+//   grant select on table public.used_artists to anon, authenticated;
+//   grant all    on table public.used_artists to service_role;
+//   alter table public.used_artists enable row level security;
+//   create policy "public read" on public.used_artists for select using (true);
 
 import Link from "next/link";
-import { supabase, todayUtcDate } from "@/lib/supabase";
+import { supabase, todayUtcDate, type ArtistRow } from "@/lib/supabase";
 import DailyChallenge, { type ArtistPick } from "./DailyChallenge";
 
 export const dynamic = "force-dynamic";
+
+const COOLDOWN_DAYS = 90;
+const PICKS_PER_DAY = 3;
 
 // FNV-1a over the ISO date gives us a stable 32-bit seed for the day.
 function seedFromString(s: string): number {
@@ -51,30 +72,90 @@ function mulberry32(seed: number) {
   };
 }
 
-function pickInRange(
-  rows: ArtistPick[],
-  rand: () => number,
-  min: number,
-  max: number,
-): ArtistPick | null {
-  const subset = rows.filter((r) => r.rank >= min && r.rank <= max);
-  if (subset.length === 0) return null;
-  return subset[Math.floor(rand() * subset.length)];
+// Pick n distinct items. Deterministic for a given (arr, rand).
+function pickN<T>(arr: T[], rand: () => number, n: number): T[] {
+  const copy = [...arr];
+  const out: T[] = [];
+  for (let i = 0; i < n && copy.length > 0; i++) {
+    const idx = Math.floor(rand() * copy.length);
+    out.push(copy[idx]);
+    copy.splice(idx, 1);
+  }
+  return out;
+}
+
+// Subtract `days` from a YYYY-MM-DD date string in UTC.
+function dateSubtract(iso: string, days: number): string {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Record today's picks in `used_artists` via the PostgREST endpoint with the
+// service_role key. The table has a unique(spotify_id, used_on) constraint, so
+// `Prefer: resolution=ignore-duplicates` makes repeat renders on the same day
+// a no-op instead of an error.
+//
+// Failures are logged but do not block the page — a one-off write failure is
+// less bad than blocking play entirely. Callers should expect at-most-once
+// semantics under normal operation.
+async function recordUsedArtists(
+  picks: Array<{ spotify_id: string; artist_name: string }>,
+  usedOn: string,
+): Promise<void> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey) {
+    console.warn(
+      "recordUsedArtists: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is unset; skipping cooldown write.",
+    );
+    return;
+  }
+  if (picks.length === 0) return;
+  const rows = picks.map((p) => ({
+    spotify_id: p.spotify_id,
+    artist_name: p.artist_name,
+    used_on: usedOn,
+  }));
+  const url = `${supabaseUrl.replace(/\/$/, "")}/rest/v1/used_artists`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: serviceKey,
+        "Content-Type": "application/json",
+        Prefer: "resolution=ignore-duplicates,return=minimal",
+      },
+      body: JSON.stringify(rows),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      console.warn(
+        `recordUsedArtists: ${res.status} ${res.statusText} — ${body}`,
+      );
+    }
+  } catch (err) {
+    console.warn("recordUsedArtists: network error —", err);
+  }
 }
 
 export default async function DailyPage() {
   const snapshotDate = todayUtcDate();
-  const { data, error } = await supabase
+
+  // 1. Today's top 500.
+  const { data: artistData, error: artistErr } = await supabase
     .from("artist_snapshots")
-    .select("rank, artist_name")
+    .select("rank, artist_name, spotify_id")
     .eq("snapshot_date", snapshotDate)
     .lte("rank", 500)
     .order("rank", { ascending: true });
 
-  if (error) {
-    return <ErrorState title="Couldn't load artists" detail={error.message} />;
+  if (artistErr) {
+    return (
+      <ErrorState title="Couldn't load artists" detail={artistErr.message} />
+    );
   }
-  if (!data || data.length === 0) {
+  if (!artistData || artistData.length === 0) {
     return (
       <ErrorState
         title="No snapshot for today"
@@ -83,27 +164,66 @@ export default async function DailyPage() {
     );
   }
 
-  const rows = data as ArtistPick[];
-  const rand = mulberry32(seedFromString(snapshotDate));
-  const picks = [
-    pickInRange(rows, rand, 1, 100),
-    pickInRange(rows, rand, 101, 350),
-    pickInRange(rows, rand, 351, 500),
-  ];
-  if (picks.some((p) => p === null)) {
+  // 2. Artists used in the last 90 days (excluding today, so repeat renders
+  //    of the same date don't shrink their own pool — keeps picks stable).
+  const cutoff = dateSubtract(snapshotDate, COOLDOWN_DAYS);
+  const { data: usedData, error: usedErr } = await supabase
+    .from("used_artists")
+    .select("spotify_id")
+    .gt("used_on", cutoff)
+    .lt("used_on", snapshotDate);
+
+  if (usedErr) {
     return (
       <ErrorState
-        title="Not enough artists"
-        detail={`Today's snapshot is missing one of the rank bands (1–100, 101–350, 351–500).`}
+        title="Couldn't load cooldown ledger"
+        detail={`${usedErr.message} — check that the used_artists table exists (SQL is in a comment at the top of app/daily/page.tsx).`}
+      />
+    );
+  }
+  const excluded = new Set(
+    (usedData ?? [])
+      .map((r) => r.spotify_id)
+      .filter((id): id is string => typeof id === "string"),
+  );
+
+  // 3. Build the eligible pool. An artist without a spotify_id can't be
+  //    tracked in the cooldown ledger, so drop those to keep the invariant.
+  const rows = artistData as ArtistRow[];
+  const pool = rows.filter(
+    (a): a is ArtistRow & { spotify_id: string } =>
+      typeof a.spotify_id === "string" && !excluded.has(a.spotify_id),
+  );
+  if (pool.length < PICKS_PER_DAY) {
+    return (
+      <ErrorState
+        title="Pool exhausted"
+        detail={`Only ${pool.length} eligible artists after the ${COOLDOWN_DAYS}-day cooldown — can't pick ${PICKS_PER_DAY}.`}
       />
     );
   }
 
+  // 4. Seeded pick of 3 distinct artists from the full pool.
+  const rand = mulberry32(seedFromString(snapshotDate));
+  const picks = pickN(pool, rand, PICKS_PER_DAY);
+
+  // 5. Record them so tomorrow's filter includes them.
+  await recordUsedArtists(
+    picks.map((p) => ({
+      spotify_id: p.spotify_id,
+      artist_name: p.artist_name,
+    })),
+    snapshotDate,
+  );
+
+  // Strip spotify_id before handing to the client — it doesn't need it.
+  const clientPicks: ArtistPick[] = picks.map((p) => ({
+    rank: p.rank,
+    artist_name: p.artist_name,
+  }));
+
   return (
-    <DailyChallenge
-      picks={picks as ArtistPick[]}
-      snapshotDate={snapshotDate}
-    />
+    <DailyChallenge picks={clientPicks} snapshotDate={snapshotDate} />
   );
 }
 
