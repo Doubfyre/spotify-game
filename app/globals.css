@@ -172,6 +172,27 @@ body::before {
   animation: modal-scale-in 0.22s cubic-bezier(0.2, 0.9, 0.2, 1.05) both;
 }
 
+/* Daily Challenge card heartbeat — a single slow expanding ring every 3s */
+@keyframes card-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(31, 223, 100, 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(31, 223, 100, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(31, 223, 100, 0);
+  }
+}
+.animate-card-pulse {
+  animation: card-pulse 3s ease-out infinite;
+}
+/* Pause the pulse on hover — the hover state already paints a solid green
+   border, so the ring would read as visual noise layered on top. */
+.animate-card-pulse:hover {
+  animation: none;
+}
+
 /* Reusable animation classes */
 .animate-pulse-dot {
   animation: pulse-dot 2s ease-in-out infinite;

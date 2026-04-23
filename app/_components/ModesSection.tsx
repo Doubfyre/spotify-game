@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 type ModalAction = { label: string; href: string };
 
 type Mode = {
   id: "solo" | "daily" | "party";
-  num: string;
   name: string;
   shortDesc: string;
   modal: {
@@ -20,7 +20,6 @@ type Mode = {
 const MODES: Mode[] = [
   {
     id: "solo",
-    num: "01",
     name: "Solo Play",
     shortDesc: "Five rounds. Guess high-ranking artists for points.",
     modal: {
@@ -32,7 +31,6 @@ const MODES: Mode[] = [
   },
   {
     id: "daily",
-    num: "02",
     name: "Daily Challenge",
     shortDesc: "Three mystery artists. Guess their exact ranks.",
     modal: {
@@ -44,7 +42,6 @@ const MODES: Mode[] = [
   },
   {
     id: "party",
-    num: "03",
     name: "Party Mode",
     shortDesc: "Play with friends. Same device or online room.",
     modal: {
@@ -67,35 +64,55 @@ export default function ModesSection({
   todayTag: string;
 }) {
   const [openIdx, setOpenIdx] = useState<number | null>(null);
-  const [dailyCompleted, setDailyCompleted] = useState(false);
+  const [dailyScore, setDailyScore] = useState<number | null>(null);
   const openMode = openIdx !== null ? MODES[openIdx] : null;
 
-  // Check localStorage *after mount* so the SSR markup matches the first
-  // client paint. If the user has completed today's daily, flip the card's
-  // CTA to "Completed ✓".
+  // After mount, check whether the player has completed today's daily. The
+  // literal spec asks for a flat `daily-challenge-score` key; we also fall
+  // back to parsing the existing date-scoped JSON blob that DailyChallenge
+  // writes, so this works today without touching other files.
   useEffect(() => {
+    let score: number | null = null;
     try {
-      if (localStorage.getItem(`daily-challenge:${todaySnapshot}`)) {
-        setDailyCompleted(true);
+      const flat = localStorage.getItem("daily-challenge-score");
+      if (flat !== null && flat !== "") {
+        const n = Number(flat);
+        if (Number.isFinite(n) && n >= 0) score = n;
+      }
+      if (score === null) {
+        const raw = localStorage.getItem(`daily-challenge:${todaySnapshot}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (
+            parsed &&
+            parsed.date === todaySnapshot &&
+            typeof parsed.total === "number"
+          ) {
+            score = parsed.total;
+          }
+        }
       }
     } catch {
-      // localStorage can be disabled (private mode, iframes) — ignore.
+      // localStorage disabled or malformed — leave as null
     }
+    if (score !== null) setDailyScore(score);
   }, [todaySnapshot]);
 
   return (
     <>
-      <div className="h-full grid grid-cols-1 md:grid-cols-3 gap-4">
-        {MODES.map((mode, i) => (
-          <ModeCard
-            key={mode.id}
-            mode={mode}
-            tag={tagFor(mode, { todayTag })}
-            cta={mode.id === "daily" && dailyCompleted ? "Completed ✓" : "Play →"}
-            completed={mode.id === "daily" && dailyCompleted}
-            onOpen={() => setOpenIdx(i)}
-          />
-        ))}
+      <div className="h-full flex flex-col gap-4">
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 min-h-0">
+          {MODES.map((mode, i) => (
+            <ModeCard
+              key={mode.id}
+              mode={mode}
+              tag={tagFor(mode, todayTag)}
+              dailyScore={dailyScore}
+              onOpen={() => setOpenIdx(i)}
+            />
+          ))}
+        </div>
+        <PlayerCountLine todaySnapshot={todaySnapshot} />
       </div>
 
       {openMode && (
@@ -105,80 +122,247 @@ export default function ModesSection({
   );
 }
 
-function tagFor(mode: Mode, ctx: { todayTag: string }): string {
+function tagFor(mode: Mode, todayTag: string): string {
   switch (mode.id) {
     case "solo":
       return "5 ROUNDS";
     case "daily":
-      return `TODAY'S CHALLENGE · ${ctx.todayTag}`;
+      return `TODAY'S CHALLENGE · ${todayTag}`;
     case "party":
       return "2–8 PLAYERS";
   }
 }
 
+// ------------------------------------------------------------
+// Card
+// ------------------------------------------------------------
+
 function ModeCard({
   mode,
   tag,
-  cta,
-  completed,
+  dailyScore,
   onOpen,
 }: {
   mode: Mode;
   tag: string;
-  cta: string;
-  completed: boolean;
+  dailyScore: number | null;
   onOpen: () => void;
 }) {
+  const completed = mode.id === "daily" && dailyScore !== null;
+  const cta = completed ? "Completed ✓" : "Play →";
+
+  // The daily card gets an animated pulse ring (heartbeat) to hint at its
+  // time-sensitive nature. Paused on hover via CSS (see globals.css).
+  const pulseClass =
+    mode.id === "daily" && !completed ? "animate-card-pulse" : "";
+
   return (
     <button
       type="button"
       onClick={onOpen}
       aria-label={`Open how-to-play for ${mode.name}`}
-      className="group relative bg-surface border border-border rounded-lg p-6 sm:p-8 text-left transition hover:border-spotify hover:-translate-y-0.5 cursor-pointer overflow-hidden flex flex-col min-h-[220px] md:min-h-0 md:h-full"
+      className={`group relative bg-surface border border-border rounded-lg p-6 sm:p-7 text-left transition-colors duration-200 hover:border-spotify cursor-pointer overflow-hidden flex flex-col min-h-[320px] md:min-h-0 md:h-full ${pulseClass}`}
     >
-      {/* hover gradient wash */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(31,223,100,0.05) 0%, transparent 60%)",
-        }}
-      />
+      {/* Top: tag */}
+      <div className="font-mono text-[11px] tracking-[2px] uppercase text-spotify">
+        {tag}
+      </div>
 
-      {/* large faded number in the background */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute -top-2 right-4 font-display leading-none text-white/[0.06] group-hover:text-spotify/15 transition-colors select-none"
-        style={{ fontSize: "clamp(96px, 14vh, 180px)" }}
-      >
-        {mode.num}
-      </span>
-
-      <div className="relative flex flex-col h-full">
-        <div className="font-mono text-[11px] tracking-[2px] uppercase text-spotify mb-3">
-          {tag}
-        </div>
+      {/* Upper-middle: title + description */}
+      <div className="mt-4">
         <h3
-          className="font-display tracking-[2px] text-foreground mb-3 leading-none"
-          style={{ fontSize: "clamp(28px, 3.5vw, 42px)" }}
+          className="font-display tracking-[2px] text-foreground leading-none"
+          style={{ fontSize: "clamp(28px, 3.4vw, 40px)" }}
         >
           {mode.name}
         </h3>
-        <p className="text-[14px] text-muted leading-[1.5] flex-1">
+        <p className="mt-2 text-[13px] sm:text-[14px] text-muted leading-[1.5]">
           {mode.shortDesc}
         </p>
-        <div
-          className={`mt-6 font-mono text-[12px] tracking-[2px] uppercase ${
-            completed ? "text-muted" : "text-spotify"
-          } group-hover:gap-3 transition-all`}
-        >
-          {cta}
+      </div>
+
+      {/* Lower-middle: visual element — fills remaining space and scales on hover */}
+      <div className="flex-1 flex items-center justify-center min-h-0 py-4">
+        <div className="transition-transform duration-200 group-hover:scale-105">
+          {mode.id === "solo" && <SoloVisual />}
+          {mode.id === "daily" && (
+            <DailyVisual score={dailyScore} completed={completed} />
+          )}
+          {mode.id === "party" && <PartyVisual />}
         </div>
+      </div>
+
+      {/* Bottom: Play button */}
+      <div
+        className={`font-mono text-[12px] tracking-[2px] uppercase ${completed ? "text-muted" : "text-spotify"}`}
+      >
+        {cta}
       </div>
     </button>
   );
 }
+
+// ------------------------------------------------------------
+// Visual elements
+// ------------------------------------------------------------
+
+function SoloVisual() {
+  // Static teaser: "this is what a good round looks like."
+  return (
+    <div
+      className="font-display leading-none text-spotify tabular-nums"
+      style={{ fontSize: "clamp(72px, 10vh, 120px)" }}
+    >
+      487
+    </div>
+  );
+}
+
+function DailyVisual({
+  score,
+  completed,
+}: {
+  score: number | null;
+  completed: boolean;
+}) {
+  if (completed && score !== null) {
+    return (
+      <div className="text-center">
+        <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mb-1">
+          Your score today
+        </div>
+        <div
+          className="font-display leading-none text-spotify tabular-nums"
+          style={{ fontSize: "clamp(64px, 9vh, 104px)" }}
+        >
+          {score}
+        </div>
+      </div>
+    );
+  }
+  return <CountdownDisplay />;
+}
+
+function CountdownDisplay() {
+  // Placeholder until the client tick lands — avoids SSR/client mismatch.
+  const [display, setDisplay] = useState<string>("--:--:--");
+
+  useEffect(() => {
+    function tick() {
+      const now = new Date();
+      const midnight = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate() + 1,
+          0,
+          0,
+          0,
+        ),
+      );
+      const diff = Math.max(0, midnight.getTime() - now.getTime());
+      const h = Math.floor(diff / 3_600_000);
+      const m = Math.floor((diff % 3_600_000) / 60_000);
+      const s = Math.floor((diff % 60_000) / 1000);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      setDisplay(`${pad(h)}:${pad(m)}:${pad(s)}`);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div className="text-center">
+      <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mb-2">
+        Resets in
+      </div>
+      <div
+        className="font-mono font-medium text-spotify tabular-nums tracking-[2px] leading-none"
+        style={{ fontSize: "clamp(28px, 4.5vh, 44px)" }}
+      >
+        {display}
+      </div>
+    </div>
+  );
+}
+
+function PartyVisual() {
+  return (
+    <div className="text-center">
+      <div className="flex items-center justify-center gap-2">
+        <span
+          className="w-8 h-8 rounded-full border border-background"
+          style={{ background: "var(--color-spotify)" }}
+          aria-hidden
+        />
+        <span
+          className="w-8 h-8 rounded-full border border-background"
+          style={{ background: "var(--color-amber)" }}
+          aria-hidden
+        />
+        <span
+          className="w-8 h-8 rounded-full border border-background"
+          style={{ background: "#3b82f6" }}
+          aria-hidden
+        />
+        <span
+          className="w-8 h-8 rounded-full border border-dashed border-muted flex items-center justify-center text-muted text-sm leading-none"
+          aria-hidden
+        >
+          +
+        </span>
+      </div>
+      <div className="mt-3 font-mono text-[10px] tracking-[2px] uppercase text-muted">
+        Pass &amp; Play or Online
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
+// Live player count (Supabase count query, refreshed every 60s)
+// ------------------------------------------------------------
+
+function PlayerCountLine({ todaySnapshot }: { todaySnapshot: string }) {
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const { count: n, error } = await supabase
+        .from("daily_scores")
+        .select("*", { count: "exact", head: true })
+        .eq("snapshot_date", todaySnapshot);
+      if (cancelled) return;
+      if (error) {
+        setCount(null);
+        return;
+      }
+      setCount(n ?? 0);
+    }
+    load();
+    const id = setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [todaySnapshot]);
+
+  // Hide the whole line when we don't have something useful to say.
+  if (count === null || count <= 0) return <div className="h-4" aria-hidden />;
+
+  return (
+    <div className="font-mono text-[10px] sm:text-[11px] tracking-[2px] uppercase text-muted text-center">
+      {count.toLocaleString()} {count === 1 ? "person has" : "people have"}{" "}
+      played today
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
+// Modal — unchanged from previous version
+// ------------------------------------------------------------
 
 function HowToPlayModal({
   mode,
