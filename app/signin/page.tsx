@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useMemo, useState, type FormEvent } from "react";
 import { createBrowserSupabase } from "@/lib/supabase";
 
 type Mode = "signin" | "signup";
@@ -31,7 +31,22 @@ function friendlyError(msg: string): string {
 }
 
 export default function SignInPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignInInner />
+    </Suspense>
+  );
+}
+
+// useSearchParams forces this component into the client; wrapping in Suspense
+// above avoids build-time warnings about static prerender boundaries.
+function SignInInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Only allow same-origin relative paths as next= targets, to avoid open
+  // redirects like ?next=https://evil.com.
+  const rawNext = searchParams.get("next") ?? "/";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
   const supabase = useMemo(() => createBrowserSupabase(), []);
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
@@ -79,7 +94,7 @@ export default function SignInPage() {
       }
       // Cookies are set by the browser client — nudge the server to re-read
       // them so the nav updates immediately.
-      router.push("/");
+      router.push(next);
       router.refresh();
       return;
     }
@@ -89,7 +104,7 @@ export default function SignInPage() {
       email: cleanEmail,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     });
     setLoading(false);
@@ -99,7 +114,7 @@ export default function SignInPage() {
     }
     if (data.session) {
       // Supabase project has email confirmation disabled — already signed in.
-      router.push("/");
+      router.push(next);
       router.refresh();
       return;
     }

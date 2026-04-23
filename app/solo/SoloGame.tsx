@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import type { ArtistRow } from "@/lib/supabase";
+import { fuzzyFind } from "@/lib/fuzzy";
 
 const TOTAL_ROUNDS = 5;
 // Perfect game = picking rank 500 five times (ignoring the "already picked"
@@ -19,65 +20,6 @@ type Pick = {
 function pointsForRank(rank: number | null): number {
   if (rank === null || rank < 1 || rank > 500) return 0;
   return rank;
-}
-
-// Lowercase, strip punctuation, collapse whitespace.
-function normalize(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// Levenshtein edit distance. Used to forgive single-character typos.
-function editDistance(a: string, b: string): number {
-  if (a === b) return 0;
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  let prev = Array.from({ length: n + 1 }, (_, i) => i);
-  const curr = new Array(n + 1);
-  for (let i = 1; i <= m; i++) {
-    curr[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
-    }
-    prev = curr.slice();
-  }
-  return prev[n];
-}
-
-function fuzzyFind(
-  rawQuery: string,
-  candidates: ArtistRow[],
-): ArtistRow | null {
-  const q = normalize(rawQuery);
-  if (!q) return null;
-
-  // Pass 1: exact match on normalized strings.
-  for (const a of candidates) {
-    if (normalize(a.artist_name) === q) return a;
-  }
-
-  // Pass 2: whole-name typo tolerance. Edit distance ≤ 2 between the full
-  // normalized input and the full normalized artist name — "taylor swft"
-  // matches Taylor Swift, but "taylor" does not. On ties the more popular
-  // artist wins (candidates are pre-sorted by rank ascending).
-  let best: ArtistRow | null = null;
-  let bestDist = 3;
-  for (const a of candidates) {
-    const n = normalize(a.artist_name);
-    if (Math.abs(n.length - q.length) > 2) continue; // cheap prune
-    const dist = editDistance(q, n);
-    if (dist <= 2 && dist < bestDist) {
-      bestDist = dist;
-      best = a;
-    }
-  }
-  return best;
 }
 
 export default function SoloGame({

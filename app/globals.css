@@ -105,6 +105,46 @@ body::before {
   }
 }
 
+/* Pass & Play 3-2-1 pop */
+@keyframes countdown-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 0.3;
+  }
+}
+
+.animate-countdown-pop {
+  animation: countdown-pop 0.9s ease-out both;
+}
+
+/* Subtle winner entrance */
+@keyframes winner-in {
+  0% {
+    transform: translateY(20px) scale(0.9);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-winner {
+  animation: winner-in 0.8s cubic-bezier(0.2, 0.9, 0.2, 1.05) both;
+}
+
 /* Reusable animation classes */
 .animate-pulse-dot {
   animation: pulse-dot 2s ease-in-out infinite;

@@ -77,8 +77,9 @@ const MODES: Mode[] = [
     num: "03",
     icon: "🎉",
     name: "Party Mode",
-    desc: "Play live with friends — in the same room or online. Create a room, share the code, take turns across five rounds.",
-    tag: "Coming soon",
+    desc: "Play with friends — pass one device around or create a live online room. Up to 8 players, take turns across five rounds.",
+    tag: "2–8 players",
+    href: "/party",
   },
 ];
 
