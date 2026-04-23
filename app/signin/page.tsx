@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState, type FormEvent } from "react";
 import { createBrowserSupabase } from "@/lib/supabase";
+import { clearGameLocalStorage } from "@/lib/clear-game-state";
 
 type Mode = "signin" | "signup";
 
@@ -92,6 +93,8 @@ function SignInInner() {
         setError(friendlyError(error.message));
         return;
       }
+      // Wipe any stale game state left by a previous session on this device.
+      clearGameLocalStorage();
       // Cookies are set by the browser client — nudge the server to re-read
       // them so the nav updates immediately.
       router.push(next);
@@ -114,6 +117,7 @@ function SignInInner() {
     }
     if (data.session) {
       // Supabase project has email confirmation disabled — already signed in.
+      clearGameLocalStorage();
       router.push(next);
       router.refresh();
       return;

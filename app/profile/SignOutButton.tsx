@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase";
+import { clearGameLocalStorage } from "@/lib/clear-game-state";
 
 export default function SignOutButton() {
   const router = useRouter();
@@ -12,6 +13,9 @@ export default function SignOutButton() {
     setLoading(true);
     const supabase = createBrowserSupabase();
     await supabase.auth.signOut();
+    // Wipe per-player localStorage so a different user on this device
+    // doesn't inherit the previous player's progress.
+    clearGameLocalStorage();
     // Send them home and force the server layout to re-read the cookie jar
     // (which is now empty) so the nav flips back to Log In / Sign Up.
     router.push("/");
