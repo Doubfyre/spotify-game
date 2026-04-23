@@ -1,4 +1,5 @@
 import Link from "next/link";
+import HowToPlayButton from "./HowToPlayButton";
 
 export type NavUser = {
   displayName: string;
@@ -22,7 +23,8 @@ export default function Nav({ user }: { user: NavUser }) {
         <span className="inline-block w-2 h-2 rounded-full bg-spotify animate-pulse-dot" />
         THE SPOTIFY GAME
       </Link>
-      <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <HowToPlayButton />
         {user ? <UserMenu user={user} /> : <AuthButtons />}
       </div>
     </nav>
