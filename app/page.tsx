@@ -125,9 +125,11 @@ function Hero() {
         ))}
       </div>
 
-      {/* content — flex-1 lets it center vertically in whatever space is left above the stats bar */}
-      <div className="relative z-[2] flex-1 flex items-center">
-        <div className="max-w-[900px]">
+      {/* content — flows from its natural top. Don't wrap in a flex-1 centered
+         box: the title can be taller than the box and `items-center` would
+         overflow symmetrically, spilling the bottom into the stats bar and
+         making its border-t appear to slice the CTA buttons. */}
+      <div className="relative z-[2] max-w-[900px]">
         <div className="flex items-center gap-[10px] mb-7">
           <span className="w-8 h-px bg-spotify" />
           <span className="font-mono text-[11px] tracking-[3px] uppercase text-spotify font-medium">
@@ -177,11 +179,12 @@ function Hero() {
             See Game Modes
           </Link>
         </div>
-        </div>
       </div>
 
-      {/* stats bar — in normal flow below content, hidden on mobile */}
-      <div className="hidden md:flex gap-10 relative z-[2] border-t border-border pt-6 mt-10">
+      {/* stats bar — mt-auto pins it to the bottom of the flex column; when
+         content is too tall to leave extra space the margin collapses to 0
+         and the section grows past min-h-screen instead of overlapping. */}
+      <div className="hidden md:flex gap-10 relative z-[2] border-t border-border pt-6 mt-auto">
         {STATS.map((s) => (
           <div key={s.label} className="flex flex-col gap-1">
             <span className="font-display text-[32px] tracking-[2px] leading-none text-foreground">
