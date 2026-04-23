@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase";
 
 export type NavUser = {
-  firstName: string;
+  displayName: string;
   avatarUrl: string | null;
 } | null;
 
@@ -104,10 +104,10 @@ function UserMenu({ user }: { user: NonNullable<NavUser> }) {
           />
         ) : (
           <span className="w-6 h-6 rounded-full bg-spotify text-background flex items-center justify-center text-[11px] font-bold">
-            {user.firstName.slice(0, 1).toUpperCase()}
+            {user.displayName.slice(0, 1).toUpperCase()}
           </span>
         )}
-        <span className="hidden sm:inline">{user.firstName}</span>
+        <span className="hidden sm:inline">{user.displayName}</span>
         <svg
           width="10"
           height="10"
@@ -128,7 +128,7 @@ function UserMenu({ user }: { user: NonNullable<NavUser> }) {
             <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted">
               Signed in as
             </div>
-            <div className="text-foreground truncate">{user.firstName}</div>
+            <div className="text-foreground truncate">{user.displayName}</div>
           </div>
           <button
             type="button"

@@ -31,9 +31,10 @@ export const metadata: Metadata = {
     "Guess which artists are hiding near the edge of Spotify's top 500.",
 };
 
-// Reads the session cookie on every render. Cheap — it's an in-memory JWT
-// decode, no network hop. Running this in the root layout opts the whole app
-// into dynamic rendering, which is what we want for an auth-aware shell.
+// Reads the session cookie on every render. Running this in the root layout
+// opts the whole app into dynamic rendering, which is what we want for an
+// auth-aware shell. For email/password accounts user_metadata is usually
+// empty, so we show the email local-part as the display name.
 async function getNavUser(): Promise<NavUser> {
   const supabase = await createServerSupabase();
   const {
@@ -41,15 +42,11 @@ async function getNavUser(): Promise<NavUser> {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  // Google provides full_name + picture; Apple usually only gives email the
-  // first time and little else. Fall back gracefully.
-  const meta = user.user_metadata ?? {};
-  const nameSource: string =
-    meta.full_name ?? meta.name ?? user.email?.split("@")[0] ?? "You";
-  const firstName = nameSource.trim().split(/\s+/)[0] || "You";
-  const avatarUrl: string | null =
-    meta.avatar_url ?? meta.picture ?? null;
-  return { firstName, avatarUrl };
+  const displayName =
+    user.email?.split("@")[0]?.trim() ||
+    (user.user_metadata?.full_name as string | undefined) ||
+    "You";
+  return { displayName, avatarUrl: null };
 }
 
 export default async function RootLayout({

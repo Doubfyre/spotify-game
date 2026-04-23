@@ -350,9 +350,9 @@ function Results({
     const authClient = createBrowserSupabase();
     authClient.auth.getUser().then(({ data: { user } }) => {
       if (cancelled || !user) return;
+      const local = user.email?.split("@")[0];
       const meta = user.user_metadata ?? {};
-      const source =
-        meta.full_name ?? meta.name ?? user.email?.split("@")[0] ?? "";
+      const source = local ?? meta.full_name ?? meta.name ?? "";
       const prefill = String(source).trim().slice(0, 20);
       if (prefill) setName((prev) => (prev ? prev : prefill));
     });
