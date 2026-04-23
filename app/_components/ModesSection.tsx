@@ -162,7 +162,7 @@ function ModeCard({
       type="button"
       onClick={onOpen}
       aria-label={`Open how-to-play for ${mode.name}`}
-      className={`group relative bg-surface border border-border rounded-lg p-6 sm:p-7 text-left transition-colors duration-200 hover:border-spotify cursor-pointer overflow-hidden flex flex-col min-h-[320px] md:min-h-0 md:h-full ${pulseClass}`}
+      className={`group relative bg-surface border border-border rounded-lg p-5 sm:p-7 text-left transition-colors duration-200 hover:border-spotify cursor-pointer overflow-hidden flex flex-col min-h-[240px] md:min-h-0 md:h-full ${pulseClass}`}
     >
       {/* Top: tag */}
       <div className="font-mono text-[11px] tracking-[2px] uppercase text-spotify">
@@ -170,10 +170,10 @@ function ModeCard({
       </div>
 
       {/* Upper-middle: title + description */}
-      <div className="mt-4">
+      <div className="mt-3 sm:mt-4">
         <h3
           className="font-display tracking-[2px] text-foreground leading-none"
-          style={{ fontSize: "clamp(28px, 3.4vw, 40px)" }}
+          style={{ fontSize: "clamp(24px, 3.4vw, 40px)" }}
         >
           {mode.name}
         </h3>
@@ -183,7 +183,7 @@ function ModeCard({
       </div>
 
       {/* Lower-middle: visual element — fills remaining space and scales on hover */}
-      <div className="flex-1 flex items-center justify-center min-h-0 py-4">
+      <div className="flex-1 flex items-center justify-center min-h-0 py-3 sm:py-4">
         <div className="transition-transform duration-200 group-hover:scale-105">
           {mode.id === "solo" && <SoloVisual />}
           {mode.id === "daily" && (
@@ -231,7 +231,7 @@ function SoloVisual() {
       </div>
       <div
         className="font-display leading-none text-spotify tabular-nums"
-        style={{ fontSize: "clamp(64px, 9vh, 104px)" }}
+        style={{ fontSize: "clamp(48px, 8vh, 96px)" }}
       >
         {best !== null ? best.toLocaleString() : "—"}
       </div>
@@ -254,7 +254,7 @@ function DailyVisual({
         </div>
         <div
           className="font-display leading-none text-spotify tabular-nums"
-          style={{ fontSize: "clamp(64px, 9vh, 104px)" }}
+          style={{ fontSize: "clamp(48px, 8vh, 96px)" }}
         >
           {score}
         </div>
@@ -289,7 +289,7 @@ function CountdownDisplay() {
       </div>
       <div
         className="font-mono font-medium text-spotify tabular-nums tracking-[2px] leading-none"
-        style={{ fontSize: "clamp(28px, 4.5vh, 44px)" }}
+        style={{ fontSize: "clamp(22px, 3.6vh, 40px)" }}
       >
         {display}
       </div>

@@ -13,7 +13,7 @@ export type NavUser = {
 export default function Nav({ user }: { user: NavUser }) {
   return (
     <nav
-      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5 sm:px-10 py-5"
+      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-3 px-4 sm:px-10 py-4 sm:py-5"
       style={{
         background:
           "linear-gradient(to bottom, rgba(10,10,10,0.95) 0%, transparent 100%)",
@@ -22,12 +22,12 @@ export default function Nav({ user }: { user: NavUser }) {
     >
       <Link
         href="/"
-        className="font-display text-[22px] sm:text-[28px] tracking-[0.2em] flex items-center gap-2 text-foreground"
+        className="font-display text-[16px] sm:text-[28px] tracking-[0.1em] sm:tracking-[0.2em] flex items-center gap-2 text-foreground whitespace-nowrap"
       >
         <span className="inline-block w-2 h-2 rounded-full bg-spotify animate-pulse-dot" />
         THE SPOTIFY GAME
       </Link>
-      <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex items-center gap-2 sm:gap-4 shrink-0">
         {user ? <UserMenu user={user} /> : <AuthButtons />}
       </div>
     </nav>
@@ -39,15 +39,15 @@ function AuthButtons() {
     <>
       <Link
         href="/signin"
-        className="border border-border text-foreground rounded-[4px] px-4 sm:px-5 py-2 text-[13px] font-medium tracking-[0.3px] hover:border-spotify hover:text-spotify transition"
+        className="border border-border text-foreground rounded-[4px] px-3 sm:px-5 py-1.5 sm:py-2 text-[11px] sm:text-[13px] font-medium tracking-[0.3px] hover:border-spotify hover:text-spotify transition"
       >
         Log In
       </Link>
       <Link
         href="/signin"
-        className="bg-spotify border border-spotify text-background rounded-[4px] px-4 sm:px-5 py-2 text-[13px] font-medium tracking-[0.3px] hover:bg-spotify-bright hover:border-spotify-bright transition"
+        className="bg-spotify border border-spotify text-background rounded-[4px] px-3 sm:px-5 py-1.5 sm:py-2 text-[11px] sm:text-[13px] font-medium tracking-[0.3px] hover:bg-spotify-bright hover:border-spotify-bright transition whitespace-nowrap"
       >
-        Sign Up Free
+        Sign Up<span className="hidden sm:inline"> Free</span>
       </Link>
     </>
   );
