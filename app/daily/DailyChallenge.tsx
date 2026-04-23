@@ -56,6 +56,19 @@ function bandClass(b: ReturnType<typeof band>) {
       : "text-red";
 }
 
+// 1 → "1st", 2 → "2nd", 3 → "3rd", 11 → "11th", 21 → "21st", etc.
+function ordinal(n: number): string {
+  const j = n % 10;
+  const k = n % 100;
+  if (j === 1 && k !== 11) return `${n}st`;
+  if (j === 2 && k !== 12) return `${n}nd`;
+  if (j === 3 && k !== 13) return `${n}rd`;
+  return `${n}th`;
+}
+
+const LEADERBOARD_LIMIT = 50;
+const LEADERBOARD_POLL_MS = 30_000;
+
 export default function DailyChallenge({
   picks,
   snapshotDate,
@@ -318,26 +331,78 @@ function Results({
   const [copied, setCopied] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[] | null>(null);
   const [leaderboardErr, setLeaderboardErr] = useState<string | null>(null);
+  const [playerRank, setPlayerRank] = useState<number | null>(null);
+  const [totalPlayers, setTotalPlayers] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
 
+  const submittedAs = completed.submittedAs;
+  const playerScore = completed.total;
+
+  // Fires on mount, on submit, and every LEADERBOARD_POLL_MS. Runs up to
+  // three queries in parallel:
+  //   1. Top N rows (always)
+  //   2. Total player count (only if the player has submitted)
+  //   3. Count of scores strictly less than theirs — rank = that + 1
+  //      (only if the player has submitted)
   const fetchLeaderboard = useCallback(async () => {
-    const { data, error } = await supabase
+    const topPromise = supabase
       .from("daily_scores")
       .select("player_name, score, created_at")
       .eq("snapshot_date", snapshotDate)
       .order("score", { ascending: true })
-      .limit(10);
-    if (error) {
-      setLeaderboardErr(error.message);
+      .limit(LEADERBOARD_LIMIT);
+
+    if (!submittedAs) {
+      const { data, error } = await topPromise;
+      if (error) {
+        setLeaderboardErr(error.message);
+        return;
+      }
+      setLeaderboardErr(null);
+      setLeaderboard((data ?? []) as LeaderboardRow[]);
+      setPlayerRank(null);
+      setTotalPlayers(null);
       return;
     }
-    setLeaderboard((data ?? []) as LeaderboardRow[]);
-  }, [snapshotDate]);
 
+    const totalPromise = supabase
+      .from("daily_scores")
+      .select("*", { count: "exact", head: true })
+      .eq("snapshot_date", snapshotDate);
+    const lowerPromise = supabase
+      .from("daily_scores")
+      .select("*", { count: "exact", head: true })
+      .eq("snapshot_date", snapshotDate)
+      .lt("score", playerScore);
+
+    const [topRes, totalRes, lowerRes] = await Promise.all([
+      topPromise,
+      totalPromise,
+      lowerPromise,
+    ]);
+    const firstErr =
+      topRes.error?.message ??
+      totalRes.error?.message ??
+      lowerRes.error?.message ??
+      null;
+    if (firstErr) {
+      setLeaderboardErr(firstErr);
+      return;
+    }
+    setLeaderboardErr(null);
+    setLeaderboard((topRes.data ?? []) as LeaderboardRow[]);
+    setTotalPlayers(totalRes.count ?? 0);
+    setPlayerRank((lowerRes.count ?? 0) + 1);
+  }, [snapshotDate, submittedAs, playerScore]);
+
+  // Poll every 30s so the leaderboard stays live through the day. Clears on
+  // unmount or when the deps change (e.g. after submitting).
   useEffect(() => {
     fetchLeaderboard();
+    const id = setInterval(fetchLeaderboard, LEADERBOARD_POLL_MS);
+    return () => clearInterval(id);
   }, [fetchLeaderboard]);
 
   const shareText = useMemo(() => {
@@ -456,9 +521,21 @@ function Results({
           </div>
 
           {completed.submittedAs ? (
-            <div className="bg-surface border border-border rounded-lg p-5 mb-5 font-mono text-[11px] tracking-[2px] uppercase text-muted">
-              Submitted as{" "}
-              <span className="text-spotify">{completed.submittedAs}</span>
+            <div className="bg-surface border border-border rounded-lg p-5 mb-5">
+              <div className="font-mono text-[11px] tracking-[2px] uppercase text-muted">
+                Submitted as{" "}
+                <span className="text-spotify">{completed.submittedAs}</span>
+              </div>
+              {playerRank !== null && totalPlayers !== null && (
+                <div className="mt-2 text-foreground">
+                  You&rsquo;re ranked{" "}
+                  <span className="font-display text-spotify text-[22px] tracking-[1px]">
+                    {ordinal(playerRank)}
+                  </span>{" "}
+                  out of {totalPlayers}{" "}
+                  {totalPlayers === 1 ? "player" : "players"} today
+                </div>
+              )}
             </div>
           ) : (
             <form
@@ -498,7 +575,9 @@ function Results({
           <Leaderboard
             rows={leaderboard}
             err={leaderboardErr}
-            highlightName={completed.submittedAs}
+            playerName={completed.submittedAs}
+            playerScore={completed.total}
+            playerRank={playerRank}
           />
         </section>
       </div>
@@ -509,11 +588,15 @@ function Results({
 function Leaderboard({
   rows,
   err,
-  highlightName,
+  playerName,
+  playerScore,
+  playerRank,
 }: {
   rows: LeaderboardRow[] | null;
   err: string | null;
-  highlightName: string | null;
+  playerName: string | null;
+  playerScore: number;
+  playerRank: number | null;
 }) {
   if (err) {
     return (
@@ -536,17 +619,31 @@ function Leaderboard({
       </div>
     );
   }
+
+  // Mark the player's *own* row in the top-50 list by matching on name AND
+  // score so other users who share a name aren't highlighted too. A single
+  // player can still have multiple rows here only if they somehow submitted
+  // twice with the same name and score (extremely rare — localStorage
+  // normally prevents re-submission), in which case highlighting both is
+  // acceptable.
+  const mineInList = (row: LeaderboardRow) =>
+    playerName !== null &&
+    row.player_name === playerName &&
+    row.score === playerScore;
+  const inList = rows.some(mineInList);
+  const outsideTop = playerName !== null && playerRank !== null && !inList;
+
   return (
     <ol className="bg-surface border border-border rounded-lg overflow-hidden">
       {rows.map((row, i) => {
-        const mine = highlightName && row.player_name === highlightName;
+        const mine = mineInList(row);
         return (
           <li
             key={`${row.created_at}-${i}`}
             className={`flex items-center gap-4 px-5 py-3 border-b border-border/60 last:border-b-0 ${mine ? "bg-spotify/5" : ""}`}
           >
             <span
-              className={`font-display text-[20px] leading-none w-8 shrink-0 ${i === 0 ? "text-spotify" : "text-muted"}`}
+              className={`font-display text-[20px] leading-none w-10 shrink-0 ${i === 0 ? "text-spotify" : "text-muted"}`}
             >
               {String(i + 1).padStart(2, "0")}
             </span>
@@ -561,6 +658,25 @@ function Leaderboard({
           </li>
         );
       })}
+
+      {outsideTop && playerRank !== null && playerName !== null && (
+        <>
+          <li className="flex items-center gap-4 px-5 py-2 border-t border-border bg-background/40 font-mono text-[10px] tracking-[2px] uppercase text-muted">
+            <span className="flex-1">Your score</span>
+          </li>
+          <li className="flex items-center gap-4 px-5 py-3 bg-spotify/5">
+            <span className="font-display text-[20px] leading-none w-10 shrink-0 text-spotify">
+              {playerRank}
+            </span>
+            <span className="flex-1 truncate text-spotify font-medium">
+              {playerName}
+            </span>
+            <span className="font-mono text-[13px] text-spotify">
+              {playerScore}
+            </span>
+          </li>
+        </>
+      )}
     </ol>
   );
 }
