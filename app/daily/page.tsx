@@ -42,7 +42,8 @@
 //   create policy "public read" on public.used_artists for select using (true);
 
 import Link from "next/link";
-import { supabase, todayUtcDate, type ArtistRow } from "@/lib/supabase";
+import { supabase, type ArtistRow } from "@/lib/supabase";
+import { getTodayLondon } from "@/lib/dates";
 import DailyChallenge, { type ArtistPick } from "./DailyChallenge";
 
 export const dynamic = "force-dynamic";
@@ -140,7 +141,7 @@ async function recordUsedArtists(
 }
 
 export default async function DailyPage() {
-  const snapshotDate = todayUtcDate();
+  const snapshotDate = getTodayLondon();
 
   // 1. Today's top 500.
   const { data: artistData, error: artistErr } = await supabase

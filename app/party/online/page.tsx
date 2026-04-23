@@ -101,7 +101,8 @@
 
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { supabase as dbReadOnly, todayUtcDate } from "@/lib/supabase";
+import { supabase as dbReadOnly } from "@/lib/supabase";
+import { getTodayLondon } from "@/lib/dates";
 import OnlineParty from "./OnlineParty";
 import type { ArtistRow } from "@/lib/supabase";
 
@@ -118,7 +119,7 @@ export default async function OnlinePartyPage() {
 
   // Today's top 500, fetched server-side so the client has data ready when a
   // room starts. Artist list is the same for every player; no need to gate.
-  const snapshotDate = todayUtcDate();
+  const snapshotDate = getTodayLondon();
   const { data: artists } = await dbReadOnly
     .from("artist_snapshots")
     .select("rank, artist_name, spotify_id")

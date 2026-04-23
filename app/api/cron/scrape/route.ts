@@ -15,6 +15,7 @@
  */
 
 import * as cheerio from "cheerio";
+import { getTomorrowLondon } from "@/lib/dates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,10 +41,6 @@ function parseInteger(raw: string): number {
 function extractSpotifyId(href: string | undefined): string | null {
   const match = href && href.match(/artist\/([A-Za-z0-9]{22})/);
   return match ? match[1] : null;
-}
-
-function todayUtcDate(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 async function fetchHtml(url: string): Promise<string> {
@@ -127,7 +124,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const snapshotDate = todayUtcDate();
+    // Label with *tomorrow's* London date: the cron fires 1–2 hours before
+    // London midnight, and this snapshot is the one the app will read for
+    // the next London day.
+    const snapshotDate = getTomorrowLondon();
     const html = await fetchHtml(SOURCE_URL);
     const allRows = parseRows(html);
 

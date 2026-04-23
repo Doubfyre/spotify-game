@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase, createBrowserSupabase } from "@/lib/supabase";
+import { getTodayLondon } from "@/lib/dates";
 
 export type ArtistPick = { rank: number; artist_name: string };
 
@@ -368,10 +369,14 @@ function Results({
   //   3. Count of scores strictly less than theirs — rank = that + 1
   //      (only if the player has submitted)
   const fetchLeaderboard = useCallback(async () => {
+    // Recompute "today" in London at query time rather than using the
+    // server-rendered `snapshotDate` prop, so the leaderboard rolls over at
+    // midnight UK even if the tab has been open for hours.
+    const londonToday = getTodayLondon();
     const topPromise = supabase
       .from("daily_scores")
       .select("player_name, score, created_at")
-      .eq("snapshot_date", snapshotDate)
+      .eq("snapshot_date", londonToday)
       .order("score", { ascending: true })
       .limit(LEADERBOARD_LIMIT);
 
@@ -391,11 +396,11 @@ function Results({
     const totalPromise = supabase
       .from("daily_scores")
       .select("*", { count: "exact", head: true })
-      .eq("snapshot_date", snapshotDate);
+      .eq("snapshot_date", londonToday);
     const lowerPromise = supabase
       .from("daily_scores")
       .select("*", { count: "exact", head: true })
-      .eq("snapshot_date", snapshotDate)
+      .eq("snapshot_date", londonToday)
       .lt("score", playerScore);
 
     const [topRes, totalRes, lowerRes] = await Promise.all([
@@ -416,7 +421,7 @@ function Results({
     setLeaderboard((topRes.data ?? []) as LeaderboardRow[]);
     setTotalPlayers(totalRes.count ?? 0);
     setPlayerRank((lowerRes.count ?? 0) + 1);
-  }, [snapshotDate, submittedAs, playerScore]);
+  }, [submittedAs, playerScore]);
 
   // Poll every 30s so the leaderboard stays live through the day. Clears on
   // unmount or when the deps change (e.g. after submitting).

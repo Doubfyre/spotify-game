@@ -1,8 +1,9 @@
 {
+  "_comment": "Scraper runs at 22:00 UTC daily. That's 23:00 BST in summer (UK on UTC+1) and 22:00 GMT in winter (UK on UTC+0) — either way, 1–2 hours before the Europe/London midnight at which every game mode resets. This guarantees today's snapshot is already in the DB before the UK day rolls over. Cron schedules on Vercel are always UTC; named timezones aren't supported, so UTC timing is picked specifically because it sits on the right side of both DST transitions.",
   "crons": [
     {
       "path": "/api/cron/scrape",
-      "schedule": "0 6 * * *"
+      "schedule": "0 22 * * *"
     }
   ]
 }

@@ -36,6 +36,3 @@ export type ArtistRow = {
   spotify_id: string | null;
 };
 
-export function todayUtcDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}

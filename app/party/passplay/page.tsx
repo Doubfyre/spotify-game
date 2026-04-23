@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { supabase, todayUtcDate, type ArtistRow } from "@/lib/supabase";
+import { supabase, type ArtistRow } from "@/lib/supabase";
+import { getTodayLondon } from "@/lib/dates";
 import PassPlayGame from "./PassPlayGame";
 
 export const dynamic = "force-dynamic";
 
 export default async function PassPlayPage() {
-  const snapshotDate = todayUtcDate();
+  const snapshotDate = getTodayLondon();
   const { data, error } = await supabase
     .from("artist_snapshots")
     .select("rank, artist_name, spotify_id")

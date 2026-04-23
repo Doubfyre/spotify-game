@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { msUntilLondonMidnight } from "@/lib/dates";
 
 type ModalAction = { label: string; href: string };
 
@@ -249,18 +250,7 @@ function CountdownDisplay() {
 
   useEffect(() => {
     function tick() {
-      const now = new Date();
-      const midnight = new Date(
-        Date.UTC(
-          now.getUTCFullYear(),
-          now.getUTCMonth(),
-          now.getUTCDate() + 1,
-          0,
-          0,
-          0,
-        ),
-      );
-      const diff = Math.max(0, midnight.getTime() - now.getTime());
+      const diff = msUntilLondonMidnight();
       const h = Math.floor(diff / 3_600_000);
       const m = Math.floor((diff % 3_600_000) / 60_000);
       const s = Math.floor((diff % 60_000) / 1000);

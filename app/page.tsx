@@ -1,4 +1,5 @@
 import ModesSection from "./_components/ModesSection";
+import { getTodayLondon } from "@/lib/dates";
 
 // Deterministic floating-number config. Hardcoded (not Math.random()) so the
 // server-rendered markup matches the client render — avoids a hydration
@@ -39,18 +40,18 @@ const MONTHS_SHORT = [
   "DEC",
 ];
 
-// Today's date computed server-side (UTC) and passed to the client so the
-// "completed today" check uses the same YYYY-MM-DD key the Daily Challenge
-// writes to localStorage. UTC matches the snapshot cadence.
-function todayUtc(): { snapshot: string; tag: string } {
-  const d = new Date();
-  const snapshot = d.toISOString().slice(0, 10);
-  const tag = `${d.getUTCDate()} ${MONTHS_SHORT[d.getUTCMonth()]}`;
-  return { snapshot, tag };
+// Today's date and tag derived from London time so everything on the page
+// lines up with the midnight-UK reset used elsewhere in the app.
+function todayLondon(): { snapshot: string; tag: string } {
+  const snapshot = getTodayLondon();
+  const [, mm, dd] = snapshot.split("-").map(Number);
+  // Build the tag directly from the ISO parts — `snapshot` is already
+  // London-local, so no second timezone conversion is needed.
+  return { snapshot, tag: `${dd} ${MONTHS_SHORT[mm - 1]}` };
 }
 
 export default function Home() {
-  const { snapshot, tag } = todayUtc();
+  const { snapshot, tag } = todayLondon();
 
   return (
     <main className="relative flex flex-col min-h-[100dvh] md:h-[100dvh] md:overflow-hidden pt-[80px]">

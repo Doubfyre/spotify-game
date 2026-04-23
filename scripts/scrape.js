@@ -2,7 +2,7 @@
 // and upserts a dated snapshot into Supabase.
 //
 // Usage:
-//   node scripts/scrape.js            # today's date (UTC)
+//   node scripts/scrape.js            # today's date (Europe/London)
 //   SNAPSHOT_DATE=2026-04-22 node scripts/scrape.js
 //
 // Required env (loaded from .env.local):
@@ -79,8 +79,20 @@ function parseRows(html) {
   return rows;
 }
 
-function todayUtcDate() {
-  return new Date().toISOString().slice(0, 10);
+// Today's date in Europe/London as YYYY-MM-DD. Inlined here because this
+// CLI runs under plain `node` without a TS loader; the canonical version
+// lives in lib/dates.ts. Keep the two in sync.
+function getTodayLondon() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const y = parts.find((p) => p.type === 'year').value;
+  const m = parts.find((p) => p.type === 'month').value;
+  const d = parts.find((p) => p.type === 'day').value;
+  return `${y}-${m}-${d}`;
 }
 
 async function main() {
@@ -108,7 +120,10 @@ async function main() {
   const keyHint = serviceKey.slice(0, 14) + '…';
   console.log(`Using Supabase key: ${keyHint} (expect sb_secret_…)`);
 
-  const snapshotDate = process.env.SNAPSHOT_DATE || todayUtcDate();
+  // Default to today's London date for manual runs ("fill in today's data").
+  // The production cron (app/api/cron/scrape/route.ts) uses tomorrow's London
+  // date instead, since it fires before midnight UK in prep for the next day.
+  const snapshotDate = process.env.SNAPSHOT_DATE || getTodayLondon();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(snapshotDate)) {
     console.error(`Invalid SNAPSHOT_DATE "${snapshotDate}" — expected YYYY-MM-DD.`);
     process.exit(1);
