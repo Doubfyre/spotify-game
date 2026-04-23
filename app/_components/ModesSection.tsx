@@ -6,11 +6,10 @@ import { useEffect, useRef, useState } from "react";
 type ModalAction = { label: string; href: string };
 
 type Mode = {
+  id: "solo" | "daily" | "party";
   num: string;
-  icon: string;
   name: string;
-  desc: string;
-  tag: string;
+  shortDesc: string;
   modal: {
     title: string;
     rules: string;
@@ -20,11 +19,10 @@ type Mode = {
 
 const MODES: Mode[] = [
   {
+    id: "solo",
     num: "01",
-    icon: "🎯",
     name: "Solo Play",
-    desc: "Five rounds. Pick artists you think are in the top 500. Your score is their rank — highest cumulative score across five rounds wins.",
-    tag: "No account needed",
+    shortDesc: "Five rounds. Guess high-ranking artists for points.",
     modal: {
       title: "HOW TO PLAY — SOLO",
       rules:
@@ -33,11 +31,10 @@ const MODES: Mode[] = [
     },
   },
   {
+    id: "daily",
     num: "02",
-    icon: "📅",
     name: "Daily Challenge",
-    desc: "Three artists revealed each day. Guess their rank in the top 500. Lowest score wins — one attempt, everyone plays the same puzzle.",
-    tag: "Live daily",
+    shortDesc: "Three mystery artists. Guess their exact ranks.",
     modal: {
       title: "HOW TO PLAY — DAILY CHALLENGE",
       rules:
@@ -46,11 +43,10 @@ const MODES: Mode[] = [
     },
   },
   {
+    id: "party",
     num: "03",
-    icon: "🎉",
     name: "Party Mode",
-    desc: "Play with friends — pass one device around or create a live online room. Up to 8 players, take turns across five rounds.",
-    tag: "2–8 players",
+    shortDesc: "Play with friends. Same device or online room.",
     modal: {
       title: "HOW TO PLAY — PARTY MODE",
       rules:
@@ -63,37 +59,44 @@ const MODES: Mode[] = [
   },
 ];
 
-export default function ModesSection() {
+export default function ModesSection({
+  todaySnapshot,
+  todayTag,
+}: {
+  todaySnapshot: string;
+  todayTag: string;
+}) {
   const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const [dailyCompleted, setDailyCompleted] = useState(false);
   const openMode = openIdx !== null ? MODES[openIdx] : null;
+
+  // Check localStorage *after mount* so the SSR markup matches the first
+  // client paint. If the user has completed today's daily, flip the card's
+  // CTA to "Completed ✓".
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(`daily-challenge:${todaySnapshot}`)) {
+        setDailyCompleted(true);
+      }
+    } catch {
+      // localStorage can be disabled (private mode, iframes) — ignore.
+    }
+  }, [todaySnapshot]);
 
   return (
     <>
-      <section
-        id="modes"
-        className="relative bg-off-black border-t border-b border-border py-24 px-5 sm:px-10"
-      >
-        <div className="mb-14">
-          <div className="flex items-center gap-[10px] font-mono text-[11px] tracking-[3px] uppercase text-spotify font-medium mb-4">
-            <span className="w-6 h-px bg-spotify" />
-            Game Modes
-          </div>
-          <h2
-            className="font-display tracking-[2px] leading-none"
-            style={{ fontSize: "clamp(40px, 6vw, 72px)" }}
-          >
-            THREE WAYS
-            <br />
-            TO PLAY
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-[2px]">
-          {MODES.map((mode, i) => (
-            <ModeCard key={mode.num} mode={mode} onOpen={() => setOpenIdx(i)} />
-          ))}
-        </div>
-      </section>
+      <div className="h-full grid grid-cols-1 md:grid-cols-3 gap-4">
+        {MODES.map((mode, i) => (
+          <ModeCard
+            key={mode.id}
+            mode={mode}
+            tag={tagFor(mode, { todayTag })}
+            cta={mode.id === "daily" && dailyCompleted ? "Completed ✓" : "Play →"}
+            completed={mode.id === "daily" && dailyCompleted}
+            onOpen={() => setOpenIdx(i)}
+          />
+        ))}
+      </div>
 
       {openMode && (
         <HowToPlayModal mode={openMode} onClose={() => setOpenIdx(null)} />
@@ -102,42 +105,77 @@ export default function ModesSection() {
   );
 }
 
-function ModeCard({ mode, onOpen }: { mode: Mode; onOpen: () => void }) {
+function tagFor(mode: Mode, ctx: { todayTag: string }): string {
+  switch (mode.id) {
+    case "solo":
+      return "5 ROUNDS";
+    case "daily":
+      return `TODAY'S CHALLENGE · ${ctx.todayTag}`;
+    case "party":
+      return "2–8 PLAYERS";
+  }
+}
+
+function ModeCard({
+  mode,
+  tag,
+  cta,
+  completed,
+  onOpen,
+}: {
+  mode: Mode;
+  tag: string;
+  cta: string;
+  completed: boolean;
+  onOpen: () => void;
+}) {
   return (
     <button
       type="button"
       onClick={onOpen}
       aria-label={`Open how-to-play for ${mode.name}`}
-      className="block w-full text-left"
+      className="group relative bg-surface border border-border rounded-lg p-6 sm:p-8 text-left transition hover:border-spotify hover:-translate-y-0.5 cursor-pointer overflow-hidden flex flex-col min-h-[220px] md:min-h-0 md:h-full"
     >
-      <article className="group relative bg-surface p-10 border border-transparent hover:border-spotify hover:-translate-y-0.5 cursor-pointer transition overflow-hidden h-full">
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(31,223,100,0.05) 0%, transparent 60%)",
-          }}
-        />
-        <div className="relative">
-          <div className="font-display leading-none text-[72px] mb-4 text-white/[0.06] group-hover:text-spotify/15 transition-colors">
-            {mode.num}
-          </div>
-          <span className="block text-[28px] mb-5" aria-hidden>
-            {mode.icon}
-          </span>
-          <div className="font-display text-[32px] tracking-[2px] mb-3 text-foreground">
-            {mode.name}
-          </div>
-          <p className="text-[14px] text-muted leading-[1.6] mb-7">
-            {mode.desc}
-          </p>
-          <span className="inline-flex items-center gap-[6px] font-mono text-[10px] tracking-[2px] uppercase px-[10px] py-[5px] rounded-sm border border-border text-muted group-hover:border-spotify group-hover:text-spotify transition">
-            <span className="w-[5px] h-[5px] rounded-full bg-current" />
-            {mode.tag}
-          </span>
+      {/* hover gradient wash */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(31,223,100,0.05) 0%, transparent 60%)",
+        }}
+      />
+
+      {/* large faded number in the background */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -top-2 right-4 font-display leading-none text-white/[0.06] group-hover:text-spotify/15 transition-colors select-none"
+        style={{ fontSize: "clamp(96px, 14vh, 180px)" }}
+      >
+        {mode.num}
+      </span>
+
+      <div className="relative flex flex-col h-full">
+        <div className="font-mono text-[11px] tracking-[2px] uppercase text-spotify mb-3">
+          {tag}
         </div>
-      </article>
+        <h3
+          className="font-display tracking-[2px] text-foreground mb-3 leading-none"
+          style={{ fontSize: "clamp(28px, 3.5vw, 42px)" }}
+        >
+          {mode.name}
+        </h3>
+        <p className="text-[14px] text-muted leading-[1.5] flex-1">
+          {mode.shortDesc}
+        </p>
+        <div
+          className={`mt-6 font-mono text-[12px] tracking-[2px] uppercase ${
+            completed ? "text-muted" : "text-spotify"
+          } group-hover:gap-3 transition-all`}
+        >
+          {cta}
+        </div>
+      </div>
     </button>
   );
 }
@@ -152,7 +190,6 @@ function HowToPlayModal({
   const panelRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
 
-  // Escape key closes
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -161,7 +198,6 @@ function HowToPlayModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Lock body scroll while open
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -170,7 +206,6 @@ function HowToPlayModal({
     };
   }, []);
 
-  // Move focus into the modal on mount so keyboard users land inside it.
   useEffect(() => {
     closeBtnRef.current?.focus();
   }, []);
