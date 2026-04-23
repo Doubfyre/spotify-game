@@ -9,26 +9,29 @@ type Section = {
   body: string;
 };
 
+const INTRO =
+  "Guessing the most popular artists in the world is easy. We all know everyone listens to Taylor Swift. The real challenge is finding the artists sitting right at the edge — popular enough to make the top 500, but only just. That's where the points are and that's our game.";
+
 const SECTIONS: Section[] = [
   {
     num: "01",
     title: "HOW SPOTIFY RANKING WORKS",
-    body: "Spotify ranks every artist by monthly listeners. The top 500 most-listened-to artists appear on their profile pages. Position 501 and below don't show. The list updates daily and we take a fresh snapshot every night, resetting at midnight UK time.",
+    body: "Spotify tracks monthly listeners for every artist on the platform. The 500 most-listened-to artists each have their rank displayed on their profile. Drop to 501 and it disappears. We pull a fresh snapshot every night and reset at midnight UK time.",
   },
   {
     num: "02",
     title: "SOLO PLAY",
-    body: "You have 5 rounds. Each round, type the name of an artist you think is in today's Spotify top 500. Your score for that round is their rank number — so if they're ranked #487, you score 487 points. Aim as close to #500 as possible. Artists outside the top 500 score 0. Highest total score after 5 rounds wins.",
+    body: "Five rounds. Each round, type an artist you think is in today's top 500. Your score is their rank — so rank #487 is worth 487 points. The closer to #500, the better. Miss the top 500 entirely and you score zero. Highest total after five rounds wins.",
   },
   {
     num: "03",
     title: "DAILY CHALLENGE",
-    body: "Three mystery artists are revealed one at a time. You don't know their rank — you have to guess it. Type a number between 1 and 500. Your score is the total distance from the correct answers across all three artists. If the answer is #312 and you guess #280, you score 32 for that artist. Lowest total score wins. One attempt per day — resets at midnight UK time.",
+    body: "Three artists, one at a time. You know their name — but not their rank. Guess where they sit in the top 500. Your score is how far off you are across all three guesses. If the answer is #312 and you guess #280, that's 32 points. Lower is better. One shot per day, resets at midnight.",
   },
   {
     num: "04",
     title: "PARTY MODE",
-    body: "Play with up to 8 friends. Choose Pass & Play (one device, pass the phone between turns) or Online (each player on their own device using a room code). Once an artist is guessed in a party, it can't be used again in any round of that party. Highest cumulative score wins.",
+    body: "Two to eight players. Pass & Play uses one device — take turns and hand the phone over. Online gives everyone their own device via a room code. Once an artist is guessed, they're gone for the rest of the party. Highest cumulative score wins.",
   },
 ];
 
@@ -138,11 +141,15 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
           </div>
           <h2
             id="howto-full-title"
-            className="font-display tracking-[2px] leading-[0.95] text-foreground mb-10"
+            className="font-display tracking-[2px] leading-[0.95] text-foreground mb-8"
             style={{ fontSize: "clamp(40px, 8vw, 64px)" }}
           >
             THE SPOTIFY GAME
           </h2>
+
+          <p className="border-l-2 border-spotify/60 pl-5 text-[15px] sm:text-[17px] font-light leading-[1.65] text-foreground/90 mb-10">
+            {INTRO}
+          </p>
 
           <ol className="space-y-10">
             {SECTIONS.map((s) => (
