@@ -208,13 +208,33 @@ function ModeCard({
 // ------------------------------------------------------------
 
 function SoloVisual() {
-  // Static teaser: "this is what a good round looks like."
+  // Reads the personal best from localStorage *after* mount — initial
+  // render shows "—" so SSR and first client paint agree, then flips to
+  // the stored score if present.
+  const [best, setBest] = useState<number | null>(null);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("solo-best-score");
+      if (raw !== null) {
+        const n = Number(raw);
+        if (Number.isFinite(n) && n >= 0) setBest(n);
+      }
+    } catch {
+      // localStorage disabled — leave as null
+    }
+  }, []);
+
   return (
-    <div
-      className="font-display leading-none text-spotify tabular-nums"
-      style={{ fontSize: "clamp(72px, 10vh, 120px)" }}
-    >
-      487
+    <div className="text-center">
+      <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mb-1">
+        Your best score
+      </div>
+      <div
+        className="font-display leading-none text-spotify tabular-nums"
+        style={{ fontSize: "clamp(64px, 9vh, 104px)" }}
+      >
+        {best !== null ? best.toLocaleString() : "—"}
+      </div>
     </div>
   );
 }

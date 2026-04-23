@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArtistRow } from "@/lib/supabase";
 import { fuzzyFind } from "@/lib/fuzzy";
 
@@ -260,6 +260,21 @@ function Results({
 }) {
   const [copied, setCopied] = useState(false);
   const percent = Math.round((total / MAX_POSSIBLE) * 100);
+
+  // Save personal best. Results mounts once per completed game; if the user
+  // clicks "Play again" this component unmounts and remounts on the next
+  // game's end, so this effect fires exactly when we want it to.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("solo-best-score");
+      const prev = raw !== null ? Number(raw) : 0;
+      if (!Number.isFinite(prev) || total > prev) {
+        localStorage.setItem("solo-best-score", String(total));
+      }
+    } catch {
+      // localStorage disabled — skip silently
+    }
+  }, [total]);
 
   async function share() {
     const text = `I scored ${total}/${MAX_POSSIBLE} on The Spotify Game — Solo ${snapshotDate}`;
