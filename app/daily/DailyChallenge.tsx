@@ -335,6 +335,7 @@ function Results({
   const [playerRank, setPlayerRank] = useState<number | null>(null);
   const [totalPlayers, setTotalPlayers] = useState<number | null>(null);
   const [name, setName] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
 
@@ -342,15 +343,15 @@ function Results({
   const playerScore = completed.total;
 
   // Pre-fill the leaderboard name from the logged-in user's profile if they
-  // have one. Anonymous players just see the empty input. We don't force the
-  // value — the input stays editable either way. Only runs when the submit
-  // form is visible (!submittedAs).
+  // have one, and capture their user_id so the submit can attribute the
+  // score to them. Anonymous players get a blank input and null user_id.
   useEffect(() => {
     if (submittedAs) return;
     let cancelled = false;
     const authClient = createBrowserSupabase();
     authClient.auth.getUser().then(({ data: { user } }) => {
       if (cancelled || !user) return;
+      setUserId(user.id);
       const local = user.email?.split("@")[0];
       const meta = user.user_metadata ?? {};
       const source = local ?? meta.full_name ?? meta.name ?? "";
@@ -479,6 +480,7 @@ function Results({
       snapshot_date: snapshotDate,
       player_name: clean,
       score: completed.total,
+      user_id: userId,
     });
     setSubmitting(false);
     if (error) {
