@@ -22,7 +22,7 @@ const OPTIONS: Option[] = [
     num: "02",
     icon: "🌐",
     name: "Online Play",
-    desc: "Host a live room and share a 4-letter code. Each player uses their own device, 30 seconds per turn, live standings after every round.",
+    desc: "Host a live room and share a 4-letter code. Each player uses their own device, 60 seconds per turn, live standings after every round.",
     tag: "Sign-in required",
     href: "/party/online",
   },

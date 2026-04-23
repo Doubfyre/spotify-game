@@ -83,7 +83,7 @@ type PartyPick = {
 // Constants
 // ============================================================
 
-const TURN_SECONDS = 30;
+const TURN_SECONDS = 60;
 const MAX_PLAYERS = 8;
 const MIN_PLAYERS = 2;
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -417,21 +417,22 @@ function OnlinePartyInner({
     if (error) setError(error.message);
   }
 
+  // Always consumes the turn: a miss (artist not in today's top 500) is
+  // recorded as a null-match pick worth 0 points — same as solo/passplay.
+  // Duplicates are silently excluded via the `candidates` filter above;
+  // a typed dup falls through to the miss branch. Empty input and
+  // not-your-turn are the only retryable errors.
   async function handleSubmitGuess(input: string): Promise<{ error?: string }> {
     if (!room || !myPlayer || !isMyTurn) return { error: "Not your turn." };
     const trimmed = input.trim();
     if (!trimmed) return { error: "Type an artist name first." };
     const match = fuzzyFind(trimmed, candidates);
-    if (!match) return { error: "Not in today's top 500. Try another artist." };
-    if (match.spotify_id && usedSpotifyIds.has(match.spotify_id)) {
-      return { error: `${match.artist_name} has already been picked.` };
-    }
-    const points = pointsForRank(match.rank);
+    const points = pointsForRank(match?.rank ?? null);
     await recordAndAdvance(room, myPlayer, {
       input: trimmed,
-      spotify_id: match.spotify_id,
-      artist_name: match.artist_name,
-      rank: match.rank,
+      spotify_id: match?.spotify_id ?? null,
+      artist_name: match?.artist_name ?? null,
+      rank: match?.rank ?? null,
       points,
     });
     return {};
@@ -1122,7 +1123,7 @@ function ActiveScreen({
               </div>
             ) : (
               <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mt-3">
-                Press Enter · 30 seconds per turn · spelling is forgiving
+                Press Enter · 60 seconds per turn · spelling is forgiving
               </div>
             )}
           </div>

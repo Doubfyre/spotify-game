@@ -84,16 +84,16 @@ export default function PassPlayGame({
     setStatus("countdown");
   }
 
-  function submitGuess(input: string): { error?: string } {
+  // Always consumes the turn: a miss (not in top 500) is recorded as a
+  // null-match pick worth 0 points, same as solo play. Dedup is handled
+  // by the `candidates` filter (already-picked artists aren't in scope for
+  // fuzzyFind), so a typed duplicate naturally falls through to the miss
+  // branch. Empty input is the only case that doesn't advance.
+  function submitGuess(input: string): void {
     const trimmed = input.trim();
-    if (!trimmed) return { error: "Type an artist name first." };
+    if (!trimmed) return;
     const match = fuzzyFind(trimmed, candidates);
-    if (!match) return { error: "Not in today's top 500. Try another artist." };
-    if (match.spotify_id && usedArtistIds.has(match.spotify_id)) {
-      return { error: `${match.artist_name} has already been picked.` };
-    }
-
-    const points = pointsForRank(match.rank);
+    const points = pointsForRank(match?.rank ?? null);
     const pick: Pick = {
       round: currentRound,
       input: trimmed,
@@ -107,7 +107,7 @@ export default function PassPlayGame({
           : p,
       ),
     );
-    if (match.spotify_id) {
+    if (match?.spotify_id) {
       setUsedArtistIds((prev) => {
         const next = new Set(prev);
         next.add(match.spotify_id!);
@@ -121,7 +121,6 @@ export default function PassPlayGame({
       points,
     });
     setStatus("reveal");
-    return {};
   }
 
   // Called when the reveal screen's "Pass" button is clicked. Computes the
@@ -450,20 +449,15 @@ function GuessScreen({
   round: number;
   totalRounds: number;
   players: Player[];
-  onSubmit: (input: string) => { error?: string };
+  onSubmit: (input: string) => void;
 }) {
   const [input, setInput] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleSubmit() {
-    const result = onSubmit(input);
-    if (result.error) {
-      setError(result.error);
-      setInput("");
-      inputRef.current?.focus();
-    }
-    // On success, parent transitions status → reveal — this component unmounts.
+    onSubmit(input);
+    // Parent transitions to reveal on any non-empty submit and this screen
+    // unmounts. Empty input is a silent no-op — the parent returns early.
   }
 
   return (
@@ -507,10 +501,7 @@ function GuessScreen({
             autoComplete="off"
             spellCheck={false}
             value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              if (error) setError(null);
-            }}
+            onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -520,15 +511,9 @@ function GuessScreen({
             placeholder="e.g. Taylor Swift"
             className="focus-green w-full rounded-2xl bg-surface border border-border px-5 py-4 text-lg text-foreground placeholder:text-muted/60 transition"
           />
-          {error ? (
-            <div className="font-mono text-[10px] tracking-[2px] uppercase text-red mt-3">
-              {error}
-            </div>
-          ) : (
-            <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mt-3">
-              Press Enter to submit · spelling is forgiving
-            </div>
-          )}
+          <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mt-3">
+            Press Enter to submit · spelling is forgiving · no retries
+          </div>
         </div>
 
         <div className="mt-14">
