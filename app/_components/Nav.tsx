@@ -9,7 +9,7 @@ export type NavUser = {
 export default function Nav({ user }: { user: NavUser }) {
   return (
     <nav
-      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-3 px-4 sm:px-10 py-4 sm:py-5"
+      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-2 px-3 sm:px-10 py-4 sm:py-5"
       style={{
         background:
           "linear-gradient(to bottom, rgba(10,10,10,0.95) 0%, transparent 100%)",
@@ -18,7 +18,7 @@ export default function Nav({ user }: { user: NavUser }) {
     >
       <Link
         href="/"
-        className="font-display text-[16px] sm:text-[28px] tracking-[0.1em] sm:tracking-[0.2em] flex items-center gap-2 text-foreground whitespace-nowrap"
+        className="font-display text-[13px] sm:text-[28px] tracking-[0.05em] sm:tracking-[0.2em] flex items-center gap-1.5 sm:gap-2 text-foreground whitespace-nowrap"
       >
         <span className="inline-block w-2 h-2 rounded-full bg-spotify animate-pulse-dot" />
         THE SPOTIFY GAME
