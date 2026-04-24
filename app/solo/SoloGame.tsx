@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserSupabase, type ArtistRow } from "@/lib/supabase";
 import { fuzzyFind } from "@/lib/fuzzy";
+import { trackEvent } from "@/lib/tracking";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
 import HighScoreLeaderboard from "@/app/_components/HighScoreLeaderboard";
 
@@ -54,6 +55,12 @@ export default function SoloGame({
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Fire one solo_start on first mount. Subsequent "Play again" rounds
+  // fire from reset() below, so every distinct game start is tracked.
+  useEffect(() => {
+    void trackEvent("solo_start");
+  }, []);
+
   const round = picks.length;
   const isDone = round >= TOTAL_ROUNDS;
   const totalScore = picks.reduce((sum, p) => sum + p.points, 0);
@@ -97,6 +104,7 @@ export default function SoloGame({
     setPicks([]);
     setQuery("");
     inputRef.current?.focus();
+    void trackEvent("solo_start");
   }
 
   if (isDone) {
@@ -293,6 +301,12 @@ function Results({
   // insert errored, etc.).
   const [submittedAs, setSubmittedAs] = useState<string | null>(null);
   const percent = Math.round((total / MAX_POSSIBLE) * 100);
+
+  // One solo_complete per mount of Results — Results mounts exactly
+  // once per completed game (Play Again unmounts + remounts it).
+  useEffect(() => {
+    void trackEvent("solo_complete");
+  }, []);
 
   // Save personal best + submit to the public solo_scores leaderboard.
   // Results mounts once per completed game; if the user clicks "Play

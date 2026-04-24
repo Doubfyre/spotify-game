@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase";
+import { trackEvent } from "@/lib/tracking";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
 import HighScoreLeaderboard from "@/app/_components/HighScoreLeaderboard";
 import {
@@ -70,6 +71,8 @@ export default function HigherOrLowerGame({
     setLastGuess(null);
     setCorrectSide(null);
     setSubmittedAs(null);
+    // Fires on initial mount AND each Play Again (gameId bump).
+    void trackEvent("hol_start");
   }, [artists, gameId]);
 
   // Load the player's best streak on mount. Server record wins for signed-in
@@ -169,6 +172,7 @@ export default function HigherOrLowerGame({
   useEffect(() => {
     if (phase !== "over") return;
     const final = streak;
+    void trackEvent("hol_complete");
     try {
       const raw = localStorage.getItem("higher-lower-best-streak");
       const prev = raw !== null ? Number(raw) : 0;

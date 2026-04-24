@@ -5,7 +5,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { getTodayLondon, addDays } from "@/lib/dates";
+import { getTodayLondon, addDays, londonDayStartUTC } from "@/lib/dates";
 import { isAdminEmail } from "@/lib/admin";
 import AutoRefresh from "./AutoRefresh";
 
@@ -103,6 +103,26 @@ export default async function AdminPage() {
   const monthAgoDate = addDays(today, -30);
   const weekAgoTs = new Date(Date.now() - 7 * 86400000);
   const monthAgoTs = new Date(Date.now() - 30 * 86400000);
+  const todayStartISO = londonDayStartUTC(today);
+
+  // Helper for count-only queries. Runs head: true so PostgREST doesn't
+  // ship the row bodies — only the Content-Range count header. Returns
+  // 0 on error so one missing table doesn't break the whole dashboard.
+  const countToday = (
+    table: string,
+    eventType?: string,
+  ): Promise<number> =>
+    (async () => {
+      let q = supa.from(table).select("*", { count: "exact", head: true });
+      if (eventType) q = q.eq("event_type", eventType);
+      q = q.gte("created_at", todayStartISO);
+      const { count, error } = await q;
+      if (error) {
+        console.error(`admin: count ${table}${eventType ? ` (${eventType})` : ""} —`, error);
+        return 0;
+      }
+      return count ?? 0;
+    })();
 
   // Parallel load. daily_scores reads go through the anon-role PostgREST
   // client (public read policy covers them); auth.users needs service role
@@ -115,6 +135,15 @@ export default async function AdminPage() {
     allQ,
     topQ,
     allUsers,
+    soloPlaysToday,
+    holPlaysToday,
+    dailyStarts,
+    dailyCompletes,
+    soloStarts,
+    soloCompletes,
+    holStarts,
+    holCompletes,
+    sessionIdsToday,
   ] = await Promise.all([
     supa
       .from("daily_scores")
@@ -141,6 +170,21 @@ export default async function AdminPage() {
       console.error("admin: listAllUsers failed —", err);
       return [] as AuthUser[];
     }),
+    countToday("solo_scores"),
+    countToday("higher_lower_scores"),
+    countToday("game_events", "daily_start"),
+    countToday("game_events", "daily_complete"),
+    countToday("game_events", "solo_start"),
+    countToday("game_events", "solo_complete"),
+    countToday("game_events", "hol_start"),
+    countToday("game_events", "hol_complete"),
+    // PostgREST doesn't expose COUNT(DISTINCT …); fetch today's session_id
+    // column and dedupe server-side. For very high traffic this would
+    // warrant an RPC, but at our scale the bytes are fine.
+    supa
+      .from("game_events")
+      .select("session_id")
+      .gte("created_at", todayStartISO),
   ]);
 
   const todayRows = (todayQ.data ?? []) as ScoreRow[];
@@ -148,6 +192,15 @@ export default async function AdminPage() {
   const monthRows = (monthQ.data ?? []) as ScoreRow[];
   const allRows = (allQ.data ?? []) as ScoreRow[];
   const topToday = (topQ.data ?? []) as TopRow[];
+
+  const uniqueSessionsToday = (() => {
+    const rows = (sessionIdsToday.data ?? []) as Array<{
+      session_id: string | null;
+    }>;
+    const s = new Set<string>();
+    for (const r of rows) if (r.session_id) s.add(r.session_id);
+    return s.size;
+  })();
 
   const dauUnique = countUnique(todayRows);
   const dauSessions = todayRows.length;
@@ -216,12 +269,50 @@ export default async function AdminPage() {
 
         {/* Daily active */}
         <SectionHeading>Daily active ({today})</SectionHeading>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-          <StatCard label="Players today" value={dauUnique} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <StatCard
-            label="Sessions today"
+            label="Daily Challenge players today"
+            value={dauUnique}
+          />
+          <StatCard
+            label="Daily submissions today"
             value={dauSessions}
             hint="All submissions, not deduped"
+          />
+          <StatCard label="Solo plays today" value={soloPlaysToday} />
+          <StatCard
+            label="Higher or Lower plays today"
+            value={holPlaysToday}
+          />
+        </div>
+
+        {/* Today's plays by mode — from game_events. Start/complete pairs
+            show drop-off per mode; unique sessions covers all visitors
+            regardless of sign-in status (key is session_id, which every
+            browser has whether they play or not). */}
+        <SectionHeading>Today&rsquo;s plays by mode</SectionHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <ModeCard
+            label="Daily Challenge"
+            starts={dailyStarts}
+            completes={dailyCompletes}
+          />
+          <ModeCard
+            label="Solo"
+            starts={soloStarts}
+            completes={soloCompletes}
+          />
+          <ModeCard
+            label="Higher or Lower"
+            starts={holStarts}
+            completes={holCompletes}
+          />
+        </div>
+        <div className="mt-3 sm:mt-4 grid grid-cols-1 gap-3 sm:gap-4">
+          <StatCard
+            label="Unique visitors today"
+            value={uniqueSessionsToday}
+            hint="Distinct session_ids in game_events — counts guests too"
           />
         </div>
 
@@ -354,6 +445,50 @@ function EmptyCard({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-surface border border-border rounded-lg p-5 font-mono text-[11px] tracking-[2px] uppercase text-muted">
       {children}
+    </div>
+  );
+}
+
+// Side-by-side starts + completes for one game mode, with a conversion
+// rate hint when there were any starts today.
+function ModeCard({
+  label,
+  starts,
+  completes,
+}: {
+  label: string;
+  starts: number;
+  completes: number;
+}) {
+  const rate = starts > 0 ? Math.round((completes / starts) * 100) : null;
+  return (
+    <div className="bg-surface border border-border rounded-lg p-5">
+      <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted">
+        {label}
+      </div>
+      <div className="mt-3 flex items-baseline gap-6">
+        <div>
+          <div className="font-mono text-[9px] tracking-[1px] uppercase text-muted">
+            Starts
+          </div>
+          <div className="font-mono text-2xl sm:text-3xl tabular-nums leading-none text-foreground">
+            {starts.toLocaleString()}
+          </div>
+        </div>
+        <div>
+          <div className="font-mono text-[9px] tracking-[1px] uppercase text-muted">
+            Completes
+          </div>
+          <div className="font-mono text-2xl sm:text-3xl tabular-nums leading-none text-spotify">
+            {completes.toLocaleString()}
+          </div>
+        </div>
+      </div>
+      {rate !== null && (
+        <div className="mt-3 font-mono text-[9px] tracking-[1px] uppercase text-muted">
+          {rate}% completion
+        </div>
+      )}
     </div>
   );
 }

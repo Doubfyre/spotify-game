@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase, createBrowserSupabase } from "@/lib/supabase";
 import { getTodayLondon } from "@/lib/dates";
+import { trackEvent } from "@/lib/tracking";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
 
 export type ArtistPick = {
@@ -136,6 +137,14 @@ export default function DailyChallenge({
     setHydrated(true);
   }, [snapshotDate]);
 
+  // Fire daily_start once per visit, but only for fresh plays —
+  // alreadyPlayed covers server-confirmed submissions; we skip those
+  // (user is viewing results, not starting a game).
+  useEffect(() => {
+    if (!alreadyPlayed) void trackEvent("daily_start");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function submitGuess() {
     setInputError(null);
     const n = Number(input);
@@ -168,6 +177,7 @@ export default function DailyChallenge({
         // storage may be disabled — fail open, user still sees results
       }
       setCompleted(done);
+      void trackEvent("daily_complete");
     } else {
       setCurrentIdx((i) => i + 1);
       // refocus next tick
