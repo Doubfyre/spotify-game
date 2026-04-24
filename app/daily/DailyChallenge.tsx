@@ -500,7 +500,7 @@ function Results({
 
     lines.push(
       "",
-      "Think you can do better? Play today's challenge at spotify-game-six.vercel.app",
+      "Play today's challenge at spotify-game-six.vercel.app",
     );
     return lines.join("\n");
   }, [completed, snapshotDate]);
@@ -508,10 +508,10 @@ function Results({
   async function share() {
     try {
       if (navigator.share) {
-        await navigator.share({
-          title: "The Spotify Game",
-          text: shareText,
-        });
+        // Omit `title` — receivers (e.g. Messages, Twitter) often prepend
+        // it as a header above the body, which duplicates the first line
+        // of our already branded share text.
+        await navigator.share({ text: shareText });
         return;
       }
       await navigator.clipboard.writeText(shareText);
