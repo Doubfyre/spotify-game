@@ -505,7 +505,7 @@ function Results({
 
     lines.push(
       "",
-      "Play today's challenge at spotify-game-six.vercel.app",
+      "Play today's challenge at https://spotify-game-six.vercel.app",
     );
     return lines.join("\n");
   }, [completed, snapshotDate]);
