@@ -207,8 +207,8 @@ function ModeCard({
   const completed = mode.id === "daily" && dailyCompleted;
   const cta = completed ? "Completed ✓" : "Play →";
 
-  // Collapsible mini-leaderboard. Party mode has no scores table, so it
-  // opts out of the toggle entirely.
+  // Leaderboard modal opt-in. Party mode has no scores table, so it
+  // doesn't render the trigger at all.
   const leaderboardVariant: HomeLeaderboardVariant | null =
     mode.id === "solo"
       ? "solo"
@@ -274,18 +274,25 @@ function ModeCard({
       </button>
 
       {leaderboardVariant && (
-        <div className="border-t border-border/60 px-3 sm:px-7 py-2 sm:py-3">
-          <button
-            type="button"
-            onClick={() => setLbOpen((v) => !v)}
-            aria-expanded={lbOpen}
-            aria-label={`${lbOpen ? "Hide" : "Show"} ${mode.name} leaderboard`}
-            className="font-mono text-[9px] sm:text-[10px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted hover:text-foreground transition"
-          >
-            Leaderboard {lbOpen ? "−" : "+"}
-          </button>
-          <HomeCardLeaderboard variant={leaderboardVariant} isOpen={lbOpen} />
-        </div>
+        <>
+          <div className="border-t border-border/60 px-3 sm:px-7 py-2 sm:py-3">
+            <button
+              type="button"
+              onClick={() => setLbOpen(true)}
+              aria-haspopup="dialog"
+              aria-label={`Open ${mode.name} leaderboard`}
+              className="font-mono text-[9px] sm:text-[10px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted hover:text-foreground transition"
+            >
+              Leaderboard +
+            </button>
+          </div>
+          <HomeCardLeaderboard
+            open={lbOpen}
+            onClose={() => setLbOpen(false)}
+            variant={leaderboardVariant}
+            modeName={mode.name}
+          />
+        </>
       )}
     </div>
   );
