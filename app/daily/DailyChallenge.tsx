@@ -494,7 +494,7 @@ function Results({
     if (completed.rounds.length > 0) {
       lines.push("");
       completed.rounds.forEach((r, i) => {
-        lines.push(`Artist ${i + 1}: ${bandEmoji(band(r.diff))} ${r.diff} off`);
+        lines.push(`Guess ${i + 1} - ${bandEmoji(band(r.diff))} ${r.diff} off`);
       });
     }
 
