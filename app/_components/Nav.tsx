@@ -4,6 +4,7 @@ import HowToPlayButton from "./HowToPlayButton";
 export type NavUser = {
   displayName: string;
   avatarUrl: string | null;
+  isAdmin: boolean;
 } | null;
 
 export default function Nav({ user }: { user: NavUser }) {
@@ -25,6 +26,14 @@ export default function Nav({ user }: { user: NavUser }) {
       </Link>
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         <HowToPlayButton />
+        {user?.isAdmin && (
+          <Link
+            href="/admin"
+            className="font-mono text-[10px] sm:text-[11px] tracking-[2px] uppercase text-spotify hover:text-spotify-bright transition shrink-0"
+          >
+            Admin
+          </Link>
+        )}
         {user ? <UserMenu user={user} /> : <AuthButtons />}
       </div>
     </nav>

@@ -1,0 +1,358 @@
+// Admin dashboard. Gated to ADMIN_EMAIL — unauthenticated users redirect
+// to /signin?next=/admin, signed-in non-admins redirect to /. All data is
+// fetched server-side on render.
+
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { createServerSupabase } from "@/lib/supabase-server";
+import { getTodayLondon, addDays } from "@/lib/dates";
+import { isAdminEmail } from "@/lib/admin";
+
+export const dynamic = "force-dynamic";
+
+type ScoreRow = {
+  user_id: string | null;
+  player_name: string | null;
+};
+
+type TopRow = {
+  player_name: string | null;
+  score: number;
+};
+
+type AuthUser = {
+  id: string;
+  email?: string | null;
+  created_at: string;
+};
+
+// List all users via the Admin API. supabase-js's admin.listUsers works
+// with sb_secret_ keys against the auth service (unlike PostgREST), but we
+// use raw fetch here for consistency with the scraper and to keep this page
+// free of client-side Supabase wiring. Pages until we see a short page or
+// hit the safety cap (10 × 1000 = 10k users).
+async function listAllUsers(): Promise<AuthUser[]> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error(
+      "Admin needs NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY",
+    );
+  }
+  const all: AuthUser[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const res = await fetch(
+      `${url.replace(/\/$/, "")}/auth/v1/admin/users?per_page=1000&page=${page}`,
+      {
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+        },
+        cache: "no-store",
+      },
+    );
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`listUsers page ${page}: ${res.status} ${body}`);
+    }
+    const data = (await res.json()) as { users?: AuthUser[] };
+    const users = data.users ?? [];
+    all.push(...users);
+    if (users.length < 1000) break;
+  }
+  return all;
+}
+
+function countUnique(rows: ScoreRow[]): number {
+  const set = new Set<string>();
+  for (const r of rows) {
+    const key = r.user_id ?? r.player_name;
+    if (key) set.add(String(key));
+  }
+  return set.size;
+}
+
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Europe/London",
+  });
+  const time = d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/London",
+  });
+  return `${date} ${time}`;
+}
+
+export default async function AdminPage() {
+  // Auth gate: anonymous → signin, wrong user → home.
+  const supa = await createServerSupabase();
+  const {
+    data: { user },
+  } = await supa.auth.getUser();
+  if (!user) redirect("/signin?next=/admin");
+  if (!isAdminEmail(user.email)) redirect("/");
+
+  const today = getTodayLondon();
+  const weekAgoDate = addDays(today, -7);
+  const monthAgoDate = addDays(today, -30);
+  const weekAgoTs = new Date(Date.now() - 7 * 86400000);
+  const monthAgoTs = new Date(Date.now() - 30 * 86400000);
+
+  // Parallel load. daily_scores reads go through the anon-role PostgREST
+  // client (public read policy covers them); auth.users needs service role
+  // via the admin endpoint. A failure in listAllUsers falls back to an
+  // empty user list so the rest of the dashboard still renders.
+  const [
+    todayQ,
+    weekQ,
+    monthQ,
+    allQ,
+    topQ,
+    allUsers,
+  ] = await Promise.all([
+    supa
+      .from("daily_scores")
+      .select("user_id, player_name")
+      .eq("snapshot_date", today),
+    supa
+      .from("daily_scores")
+      .select("user_id, player_name")
+      .gte("snapshot_date", weekAgoDate)
+      .lte("snapshot_date", today),
+    supa
+      .from("daily_scores")
+      .select("user_id, player_name")
+      .gte("snapshot_date", monthAgoDate)
+      .lte("snapshot_date", today),
+    supa.from("daily_scores").select("user_id, player_name"),
+    supa
+      .from("daily_scores")
+      .select("player_name, score")
+      .eq("snapshot_date", today)
+      .order("score", { ascending: true })
+      .limit(10),
+    listAllUsers().catch((err) => {
+      console.error("admin: listAllUsers failed —", err);
+      return [] as AuthUser[];
+    }),
+  ]);
+
+  const todayRows = (todayQ.data ?? []) as ScoreRow[];
+  const weekRows = (weekQ.data ?? []) as ScoreRow[];
+  const monthRows = (monthQ.data ?? []) as ScoreRow[];
+  const allRows = (allQ.data ?? []) as ScoreRow[];
+  const topToday = (topQ.data ?? []) as TopRow[];
+
+  const dauUnique = countUnique(todayRows);
+  const dauSessions = todayRows.length;
+
+  const wauUnique = countUnique(weekRows);
+  const wauSessions = weekRows.length;
+  const wauSignups = allUsers.filter(
+    (u) => new Date(u.created_at) > weekAgoTs,
+  ).length;
+
+  const mauUnique = countUnique(monthRows);
+  const mauSessions = monthRows.length;
+  const mauSignups = allUsers.filter(
+    (u) => new Date(u.created_at) > monthAgoTs,
+  ).length;
+
+  const totalUsers = allUsers.length;
+  const totalCompletions = allRows.length;
+  const totalUniquePlayers = countUnique(allRows);
+
+  const recentSignups = [...allUsers]
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    )
+    .slice(0, 10);
+
+  const dataIssue = [todayQ, weekQ, monthQ, allQ, topQ].find((q) => q.error);
+  const renderedAt = new Date().toISOString();
+
+  return (
+    <main className="flex-1 px-5 sm:px-10 pt-32 pb-16">
+      <div className="w-full max-w-5xl mx-auto">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div className="font-mono text-[11px] tracking-[3px] uppercase text-spotify flex items-center gap-[10px] mb-3">
+              <span className="w-6 h-px bg-spotify" />
+              Admin dashboard
+            </div>
+            <h1
+              className="font-display tracking-[2px] leading-none text-foreground"
+              style={{ fontSize: "clamp(48px, 9vw, 88px)" }}
+            >
+              ADMIN
+            </h1>
+          </div>
+          <div className="text-right">
+            <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted">
+              Signed in as
+            </div>
+            <div className="font-mono text-[11px] text-foreground break-all">
+              {user.email}
+            </div>
+            <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mt-2">
+              {formatDateTime(renderedAt)}
+            </div>
+          </div>
+        </div>
+
+        {dataIssue && (
+          <div className="mt-8 bg-surface border border-border rounded-lg p-5 font-mono text-[11px] tracking-[1px] uppercase text-red">
+            One or more queries failed: {dataIssue.error?.message}
+          </div>
+        )}
+
+        {/* Daily active */}
+        <SectionHeading>Daily active ({today})</SectionHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <StatCard label="Players today" value={dauUnique} />
+          <StatCard
+            label="Sessions today"
+            value={dauSessions}
+            hint="All submissions, not deduped"
+          />
+        </div>
+
+        {/* Weekly */}
+        <SectionHeading>Weekly ({weekAgoDate} → {today})</SectionHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <StatCard label="Unique players" value={wauUnique} />
+          <StatCard label="Completions" value={wauSessions} />
+          <StatCard label="New signups" value={wauSignups} />
+        </div>
+
+        {/* Monthly */}
+        <SectionHeading>Monthly ({monthAgoDate} → {today})</SectionHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <StatCard label="Unique players" value={mauUnique} />
+          <StatCard label="Completions" value={mauSessions} />
+          <StatCard label="New signups" value={mauSignups} />
+        </div>
+
+        {/* All time */}
+        <SectionHeading>All time</SectionHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <StatCard label="Registered users" value={totalUsers} />
+          <StatCard label="Total completions" value={totalCompletions} />
+          <StatCard label="Unique players" value={totalUniquePlayers} />
+        </div>
+
+        {/* Top 10 today */}
+        <SectionHeading>Today&rsquo;s top 10</SectionHeading>
+        {topToday.length === 0 ? (
+          <EmptyCard>No scores submitted today yet.</EmptyCard>
+        ) : (
+          <ol className="bg-surface border border-border rounded-lg overflow-hidden">
+            {topToday.map((row, i) => (
+              <li
+                key={`${row.player_name ?? "anon"}-${i}`}
+                className="flex items-center gap-4 px-5 py-3 border-b border-border/60 last:border-b-0"
+              >
+                <span
+                  className={`font-display text-[20px] leading-none w-10 shrink-0 ${i === 0 ? "text-spotify" : "text-muted"}`}
+                >
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span className="flex-1 truncate text-foreground">
+                  {row.player_name ?? "—"}
+                </span>
+                <span className="font-mono text-[13px] tabular-nums text-spotify">
+                  {row.score}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+
+        {/* Recent signups */}
+        <SectionHeading>Recent signups</SectionHeading>
+        {recentSignups.length === 0 ? (
+          <EmptyCard>
+            No recent signups. (If you expected some, check that the
+            service-role key is configured — auth.users needs admin access.)
+          </EmptyCard>
+        ) : (
+          <ol className="bg-surface border border-border rounded-lg overflow-hidden">
+            {recentSignups.map((u, i) => (
+              <li
+                key={u.id}
+                className="flex items-center gap-4 px-5 py-3 border-b border-border/60 last:border-b-0"
+              >
+                <span className="font-display text-[20px] leading-none w-10 shrink-0 text-muted">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span className="flex-1 truncate text-foreground break-all">
+                  {u.email ?? "(no email)"}
+                </span>
+                <span className="font-mono text-[11px] tracking-[1px] text-muted shrink-0">
+                  {formatDateTime(u.created_at)}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </main>
+  );
+}
+
+// ---------- Small helpers ----------
+
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-4 mt-12 mb-5">
+      <span aria-hidden className="block w-8 h-px bg-spotify shrink-0" />
+      <h2
+        className="font-display tracking-[2px] leading-none text-foreground"
+        style={{ fontSize: "clamp(22px, 3vw, 32px)" }}
+      >
+        {children}
+      </h2>
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: number;
+  hint?: string;
+}) {
+  return (
+    <div className="bg-surface border border-border rounded-lg p-5">
+      <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted">
+        {label}
+      </div>
+      <div className="mt-2 font-mono text-3xl sm:text-4xl tabular-nums leading-none text-foreground">
+        {value.toLocaleString()}
+      </div>
+      {hint && (
+        <div className="mt-2 font-mono text-[9px] tracking-[1px] uppercase text-muted">
+          {hint}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmptyCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="bg-surface border border-border rounded-lg p-5 font-mono text-[11px] tracking-[2px] uppercase text-muted">
+      {children}
+    </div>
+  );
+}
+

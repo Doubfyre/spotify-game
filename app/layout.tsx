@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Bebas_Neue, DM_Sans, DM_Mono } from "next/font/google";
 import "./globals.css";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { isAdminEmail } from "@/lib/admin";
 import Nav, { type NavUser } from "./_components/Nav";
 import PrivacyNotice from "./_components/PrivacyNotice";
 
@@ -47,7 +48,7 @@ async function getNavUser(): Promise<NavUser> {
     user.email?.split("@")[0]?.trim() ||
     (user.user_metadata?.full_name as string | undefined) ||
     "You";
-  return { displayName, avatarUrl: null };
+  return { displayName, avatarUrl: null, isAdmin: isAdminEmail(user.email) };
 }
 
 export default async function RootLayout({
