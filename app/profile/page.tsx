@@ -185,32 +185,33 @@ export default async function ProfilePage() {
           </div>
         )}
 
-        {/* Streak + Solo best */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-surface border border-border rounded-lg p-6 flex flex-col">
-            <div className="font-mono text-[11px] tracking-[3px] uppercase text-muted mb-3">
-              Daily streak
-            </div>
-            <div className="flex items-baseline gap-3">
-              <span className="text-3xl sm:text-4xl leading-none" aria-hidden>
-                🔥
-              </span>
-              <span
-                className="font-display leading-none text-spotify tabular-nums"
-                style={{ fontSize: "clamp(56px, 9vw, 88px)" }}
-              >
-                {streaks.current}
-              </span>
-            </div>
-            <div className="mt-auto pt-3 font-mono text-[10px] tracking-[2px] uppercase text-muted">
-              Longest: {streaks.longest}
-            </div>
-          </div>
+        {/* ==================================================
+            DAILY CHALLENGE
+            ================================================== */}
+        <SectionHeading title="DAILY CHALLENGE" />
 
-          <SoloBest />
+        {/* Streak — full width so the flame number reads as the hero stat
+            for this section. Longest sits inside as secondary context. */}
+        <div className="bg-surface border border-border rounded-lg p-6 flex flex-col">
+          <div className="font-mono text-[11px] tracking-[3px] uppercase text-muted mb-3">
+            Current streak
+          </div>
+          <div className="flex items-baseline gap-3">
+            <span className="text-3xl sm:text-4xl leading-none" aria-hidden>
+              🔥
+            </span>
+            <span
+              className="font-display leading-none text-spotify tabular-nums"
+              style={{ fontSize: "clamp(56px, 9vw, 88px)" }}
+            >
+              {streaks.current}
+            </span>
+          </div>
+          <div className="mt-auto pt-3 font-mono text-[10px] tracking-[2px] uppercase text-muted">
+            Longest: {streaks.longest}
+          </div>
         </div>
 
-        {/* Stats 2×2 */}
         <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4">
           <StatCard
             label="Plays"
@@ -228,8 +229,7 @@ export default async function ProfilePage() {
           <StatCard label="Best rank" value="—" hint="Coming soon" />
         </div>
 
-        {/* Recent history */}
-        <section className="mt-10">
+        <div className="mt-8">
           <div className="font-mono text-[11px] tracking-[3px] uppercase text-spotify mb-5 flex items-center gap-[10px]">
             <span className="w-6 h-px bg-spotify" />
             Recent plays
@@ -271,9 +271,36 @@ export default async function ProfilePage() {
               })}
             </ol>
           )}
-        </section>
+        </div>
+
+        {/* ==================================================
+            SOLO PLAY
+            ================================================== */}
+        <SectionHeading title="SOLO PLAY" className="mt-14" />
+
+        <SoloBest />
       </div>
     </main>
+  );
+}
+
+function SectionHeading({
+  title,
+  className = "mb-6",
+}: {
+  title: string;
+  className?: string;
+}) {
+  return (
+    <div className={`flex items-center gap-4 ${className}`}>
+      <span aria-hidden className="block w-10 h-px bg-spotify shrink-0" />
+      <h2
+        className="font-display tracking-[2px] leading-none text-foreground"
+        style={{ fontSize: "clamp(32px, 5vw, 56px)" }}
+      >
+        {title}
+      </h2>
+    </div>
   );
 }
 

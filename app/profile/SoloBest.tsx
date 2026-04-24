@@ -23,7 +23,7 @@ export default function SoloBest() {
   return (
     <div className="bg-surface border border-border rounded-lg p-6 flex flex-col">
       <div className="font-mono text-[11px] tracking-[3px] uppercase text-muted mb-3">
-        Solo best
+        Personal best
       </div>
       <div
         className="font-display leading-none text-spotify tabular-nums"
@@ -32,7 +32,7 @@ export default function SoloBest() {
         {best !== null ? best.toLocaleString() : "—"}
       </div>
       <div className="mt-auto pt-3 font-mono text-[10px] tracking-[2px] uppercase text-muted">
-        Highest solo score
+        Highest score across 5 rounds
       </div>
     </div>
   );
