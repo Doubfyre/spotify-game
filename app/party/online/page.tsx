@@ -103,12 +103,23 @@
 //   alter publication supabase_realtime add table public.party_rooms;
 //   alter publication supabase_realtime add table public.party_players;
 //   alter publication supabase_realtime add table public.party_picks;
+//
+// ---------------------------------------------------------------------
+// Guest play: this page no longer redirects signed-out users to /signin.
+// Instead, unauthenticated visitors pick a display name and we mint a
+// Supabase anonymous session for them (via supabase.auth.signInAnonymously
+// on the client). Anonymous users are in the `authenticated` role, so all
+// the RLS policies above still apply unchanged and auth.uid() resolves
+// to their anon user id.
+//
+// REQUIRED: enable Anonymous Sign-In in the Supabase dashboard under
+// Authentication → Providers → Anonymous. Without it, signInAnonymously
+// returns an error and the client shows a fallback prompting full sign-in.
 
-import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { supabase as dbReadOnly } from "@/lib/supabase";
 import { getTodayLondon } from "@/lib/dates";
-import OnlineParty from "./OnlineParty";
+import OnlinePartyEntry from "./OnlinePartyEntry";
 import type { ArtistRow } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -118,9 +129,6 @@ export default async function OnlinePartyPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    redirect("/signin?next=/party/online");
-  }
 
   // Today's top 500, fetched server-side so the client has data ready when a
   // room starts. Artist list is the same for every player; no need to gate.
@@ -132,12 +140,19 @@ export default async function OnlinePartyPage() {
     .lte("rank", 500)
     .order("rank", { ascending: true });
 
-  const displayName = user.email?.split("@")[0] ?? "Player";
+  // Only derive an email-based display name for genuinely signed-in users.
+  // Anonymous users have no email and get their name from localStorage /
+  // the name-entry form on the client instead.
+  const emailDisplayName =
+    user && !user.is_anonymous && user.email
+      ? (user.email.split("@")[0] ?? null)
+      : null;
 
   return (
-    <OnlineParty
-      userId={user.id}
-      displayName={displayName}
+    <OnlinePartyEntry
+      initialUserId={user?.id ?? null}
+      initialIsAnonymous={user?.is_anonymous ?? false}
+      emailDisplayName={emailDisplayName}
       snapshotDate={snapshotDate}
       artists={(artists ?? []) as ArtistRow[]}
     />
