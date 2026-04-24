@@ -472,16 +472,42 @@ function Results({
   }, [fetchLeaderboard]);
 
   const shareText = useMemo(() => {
-    const lines = [
-      `The Spotify Game — Daily Challenge ${formatShareDate(snapshotDate)}`,
+    const total = completed.total;
+    // Intro line picked by total. Uses plain hyphens, no em-dash.
+    let intro: string;
+    if (total < 100) {
+      intro = `I scored ${total} today - good luck beating that 👀`;
+    } else if (total < 200) {
+      intro = `I scored ${total} today - think you can do better?`;
+    } else {
+      intro = `I scored ${total} today - can you beat me?`;
+    }
+    // Share-card emoji thresholds are looser than the in-game `band()`
+    // (30/100) on purpose — share text is a boastier channel, so a wider
+    // green bucket reads better.
+    const shareEmoji = (diff: number) =>
+      diff < 100 ? "🟢" : diff < 200 ? "🟡" : "🔴";
+
+    const lines: string[] = [
+      `🎵 The Spotify Game - Daily Challenge ${formatShareDate(snapshotDate)}`,
       "",
-      ...completed.rounds.map((r, i) => {
-        const b = band(r.diff);
-        return `Artist ${i + 1}: ${r.diff} off ${bandEmoji(b)}`;
-      }),
-      "",
-      `Total: ${completed.total}`,
+      intro,
     ];
+
+    // Cross-device replay has `rounds: []` (round-level detail isn't stored
+    // in daily_scores). Skip the per-artist block rather than printing
+    // bogus zeros.
+    if (completed.rounds.length > 0) {
+      lines.push("");
+      completed.rounds.forEach((r, i) => {
+        lines.push(`Artist ${i + 1}: ${shareEmoji(r.diff)} ${r.diff} off`);
+      });
+    }
+
+    lines.push(
+      "",
+      "Think you can do better? Play today's challenge at spotify-game-six.vercel.app",
+    );
     return lines.join("\n");
   }, [completed, snapshotDate]);
 
