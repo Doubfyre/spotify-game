@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { supabase, createBrowserSupabase } from "@/lib/supabase";
 import { getTodayLondon, msUntilLondonMidnight } from "@/lib/dates";
@@ -66,6 +67,7 @@ export default function ModesSection({
   todayTag: string;
   serverDailyCompleted?: boolean;
 }) {
+  const router = useRouter();
   const [openIdx, setOpenIdx] = useState<number | null>(null);
   const [dailyScore, setDailyScore] = useState<number | null>(null);
   const openMode = openIdx !== null ? MODES[openIdx] : null;
@@ -117,7 +119,16 @@ export default function ModesSection({
               tag={tagFor(mode, todayTag)}
               dailyScore={dailyScore}
               dailyCompleted={dailyCompleted}
-              onOpen={() => setOpenIdx(i)}
+              onOpen={() => {
+                // If the player already finished today's daily, skip the
+                // "how to play" modal and take them straight to /daily
+                // where their results + share button live.
+                if (mode.id === "daily" && dailyCompleted) {
+                  router.push("/daily");
+                  return;
+                }
+                setOpenIdx(i);
+              }}
             />
           ))}
         </div>
