@@ -227,7 +227,6 @@ export default function HigherOrLowerGame({
             wasPicked={lastGuess === "left"}
             wasCorrectSide={correctSide === "left"}
             onPick={() => guess("left")}
-            showListeners
           />
           <Card
             artist={right}
@@ -237,7 +236,6 @@ export default function HigherOrLowerGame({
             wasPicked={lastGuess === "right"}
             wasCorrectSide={correctSide === "right"}
             onPick={() => guess("right")}
-            showListeners={phase === "reveal"}
           />
         </div>
 
@@ -298,7 +296,6 @@ function Card({
   wasPicked,
   wasCorrectSide,
   onPick,
-  showListeners,
 }: {
   artist: HLArtist;
   side: Side;
@@ -307,7 +304,6 @@ function Card({
   wasPicked: boolean;
   wasCorrectSide: boolean;
   onPick: () => void;
-  showListeners: boolean;
 }) {
   // Border + tint reflect reveal state. We tint the correct side green and
   // the wrong pick red; cards not involved in the comparison stay neutral.
@@ -341,17 +337,6 @@ function Card({
         style={{ fontSize: "clamp(22px, 4vw, 44px)" }}
       >
         {artist.artist_name}
-      </div>
-      <div className="mt-3 sm:mt-5 font-mono text-[10px] tracking-[2px] uppercase text-muted">
-        Monthly listeners
-      </div>
-      <div
-        className={`font-display leading-none tabular-nums transition-colors ${
-          showListeners ? "text-spotify" : "text-muted/60"
-        }`}
-        style={{ fontSize: "clamp(26px, 5.5vw, 56px)" }}
-      >
-        {showListeners ? formatListeners(artist.monthly_listeners) : "???"}
       </div>
     </button>
   );
