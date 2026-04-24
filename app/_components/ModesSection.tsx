@@ -122,6 +122,14 @@ export default function ModesSection({
           ))}
         </div>
         <PlayerCountLine />
+        <div className="text-center">
+          <Link
+            href="/privacy"
+            className="font-mono text-[10px] tracking-[2px] uppercase text-muted/70 hover:text-muted transition"
+          >
+            Privacy
+          </Link>
+        </div>
       </div>
 
       {openMode && (

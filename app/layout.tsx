@@ -3,6 +3,7 @@ import { Bebas_Neue, DM_Sans, DM_Mono } from "next/font/google";
 import "./globals.css";
 import { createServerSupabase } from "@/lib/supabase-server";
 import Nav, { type NavUser } from "./_components/Nav";
+import PrivacyNotice from "./_components/PrivacyNotice";
 
 const bebasNeue = Bebas_Neue({
   weight: "400",
@@ -61,6 +62,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         <Nav user={user} />
         {children}
+        <PrivacyNotice show={user === null} />
       </body>
     </html>
   );
