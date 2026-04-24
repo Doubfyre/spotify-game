@@ -161,12 +161,22 @@ export default function ModesSection({
   );
 }
 
-function tagFor(mode: Mode, todayTag: string): string {
+function tagFor(mode: Mode, todayTag: string): React.ReactNode {
   switch (mode.id) {
     case "solo":
       return "5 ROUNDS";
     case "daily":
-      return `TODAY'S CHALLENGE · ${todayTag}`;
+      // Mobile cards are too narrow for the full "TODAY'S CHALLENGE"
+      // label + date — it wraps to two lines and pushes the card taller.
+      // Show a short form on mobile, the long form from sm: up.
+      return (
+        <>
+          <span className="sm:hidden">DAILY · {todayTag}</span>
+          <span className="hidden sm:inline">
+            TODAY&rsquo;S CHALLENGE · {todayTag}
+          </span>
+        </>
+      );
     case "party":
       return "2–8 PLAYERS";
     case "higherlower":
@@ -186,7 +196,7 @@ function ModeCard({
   onOpen,
 }: {
   mode: Mode;
-  tag: string;
+  tag: React.ReactNode;
   dailyScore: number | null;
   dailyCompleted: boolean;
   onOpen: () => void;
@@ -207,7 +217,7 @@ function ModeCard({
       className={`group relative bg-surface border border-border rounded-lg p-3 sm:p-7 text-left transition-colors duration-200 hover:border-spotify cursor-pointer overflow-hidden flex flex-col min-h-0 md:h-full ${pulseClass}`}
     >
       {/* Top: tag */}
-      <div className="font-mono text-[9px] sm:text-[11px] tracking-[1.5px] sm:tracking-[2px] uppercase text-spotify leading-tight">
+      <div className="font-mono text-[9px] sm:text-[11px] tracking-[1.5px] sm:tracking-[2px] uppercase text-spotify leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
         {tag}
       </div>
 
@@ -452,28 +462,8 @@ function CountdownDisplay() {
 function PartyVisual() {
   return (
     <div className="text-center">
-      <div className="flex items-center justify-center gap-1 sm:gap-2">
-        <span
-          className="w-5 h-5 sm:w-8 sm:h-8 rounded-full border border-background"
-          style={{ background: "var(--color-spotify)" }}
-          aria-hidden
-        />
-        <span
-          className="w-5 h-5 sm:w-8 sm:h-8 rounded-full border border-background"
-          style={{ background: "var(--color-amber)" }}
-          aria-hidden
-        />
-        <span
-          className="w-5 h-5 sm:w-8 sm:h-8 rounded-full border border-background"
-          style={{ background: "#3b82f6" }}
-          aria-hidden
-        />
-        <span
-          className="w-5 h-5 sm:w-8 sm:h-8 rounded-full border border-dashed border-muted flex items-center justify-center text-muted text-[10px] sm:text-sm leading-none"
-          aria-hidden
-        >
-          +
-        </span>
+      <div className="font-mono text-[10px] sm:text-[12px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted leading-tight">
+        Play with up to 8 friends
       </div>
       <div className="mt-1 sm:mt-3 font-mono text-[9px] sm:text-[10px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted">
         Pass &amp; Play or Online

@@ -137,8 +137,10 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* BOTTOM ~60%: mode cards. ModesSection handles the modal state. */}
-      <section className="relative z-[2] md:flex-[6] px-5 sm:px-10 pb-3 sm:pb-6 md:pb-10 min-h-0">
+      {/* BOTTOM ~60%: mode cards. ModesSection handles the modal state.
+          `flex-1` on mobile so the grid fills remaining viewport height
+          instead of leaving a dead gap under the last row of cards. */}
+      <section className="relative z-[2] flex-1 md:flex-[6] px-5 sm:px-10 pb-3 sm:pb-6 md:pb-10 min-h-0">
         <ModesSection
           todaySnapshot={snapshot}
           todayTag={tag}
