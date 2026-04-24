@@ -1,29 +1,41 @@
 /**
- * Vercel Cron endpoint — invoked daily at 06:00 UTC (see vercel.json).
+ * Vercel Cron endpoint — invoked daily at 22:00 UTC (see vercel.json).
  *
  * Authentication: Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`.
  * Anything else gets a 401. If CRON_SECRET isn't set on the server we fail
  * closed with 500 rather than leave the endpoint publicly scrapeable.
  *
- * Behavior mirrors `scripts/scrape.js` — fetches kworb.net/spotify/listeners,
- * parses the table, upserts today's (UTC) top 500 into `artist_snapshots`.
- * Idempotent on (snapshot_date, rank) via PostgREST merge-duplicates.
+ * Behavior mirrors `scripts/scrape.js` — fetches music.eduardlupu.com's
+ * top-500 JSON feed, parses it, upserts tomorrow's (London) top 500 into
+ * `artist_snapshots`. Idempotent on (snapshot_date, rank) via PostgREST
+ * merge-duplicates. Label uses *tomorrow's* London date because the cron
+ * fires 1–2 hours before London midnight, and this snapshot is the one the
+ * app will read for the next London day.
  *
  * Note: the parsing logic is duplicated with scripts/scrape.js. Sharing it
  * would require adding a TS runtime for the CLI script (tsx/ts-node) — not
- * worth a new dep. If kworb's table structure ever changes, update both.
+ * worth a new dep. If the source schema changes, update both.
  */
 
-import * as cheerio from "cheerio";
 import { getTomorrowLondon } from "@/lib/dates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const SOURCE_URL = "https://kworb.net/spotify/listeners.html";
+const SOURCE_URL = "https://music.eduardlupu.com/data/latest/top500.json";
 const TOP_N = 500;
 const UPSERT_CHUNK = 500;
+
+// Indexes into each `row` entry in the source JSON. Matches the `fields`
+// array the API documents: ["i","n","p","r","ml", …].
+const IDX = {
+  spotify_id: 0,
+  artist_name: 1,
+  // 2 = image hash, unused
+  rank: 3,
+  monthly_listeners: 4,
+};
 
 type Row = {
   rank: number;
@@ -32,18 +44,14 @@ type Row = {
   monthly_listeners: number;
 };
 
-function parseInteger(raw: string): number {
-  const n = Number(String(raw).replace(/[,\s]/g, ""));
-  if (!Number.isFinite(n)) throw new Error(`Not a number: "${raw}"`);
-  return n;
-}
+type SourceJson = {
+  v?: number;
+  date?: string;
+  fields?: string[];
+  rows?: unknown[];
+};
 
-function extractSpotifyId(href: string | undefined): string | null {
-  const match = href && href.match(/artist\/([A-Za-z0-9]{22})/);
-  return match ? match[1] : null;
-}
-
-async function fetchHtml(url: string): Promise<string> {
+async function fetchJson(url: string): Promise<SourceJson> {
   const res = await fetch(url, {
     headers: {
       "User-Agent":
@@ -54,23 +62,32 @@ async function fetchHtml(url: string): Promise<string> {
   if (!res.ok) {
     throw new Error(`Source fetch failed: ${res.status} ${res.statusText}`);
   }
-  return await res.text();
+  return (await res.json()) as SourceJson;
 }
 
-function parseRows(html: string): Row[] {
-  const $ = cheerio.load(html);
-  const rows: Row[] = [];
-  $("table tbody tr").each((_, tr) => {
-    const cells = $(tr).find("td");
-    if (cells.length < 3) return;
-    const rank = parseInteger($(cells[0]).text());
-    const anchor = $(cells[1]).find("a").first();
-    const artist_name = anchor.text().trim() || $(cells[1]).text().trim();
-    const spotify_id = extractSpotifyId(anchor.attr("href"));
-    const monthly_listeners = parseInteger($(cells[2]).text());
-    rows.push({ rank, artist_name, spotify_id, monthly_listeners });
-  });
-  return rows;
+// Defensive parse — skip malformed rows rather than throwing the whole
+// scrape away on one bad entry.
+function parseRows(json: SourceJson): Row[] {
+  if (!json || !Array.isArray(json.rows)) {
+    throw new Error('Unexpected response: missing "rows" array.');
+  }
+  const out: Row[] = [];
+  for (const r of json.rows) {
+    if (!Array.isArray(r) || r.length <= IDX.monthly_listeners) continue;
+    const row = r as unknown[];
+    const spotify_id =
+      typeof row[IDX.spotify_id] === "string"
+        ? (row[IDX.spotify_id] as string)
+        : null;
+    const artist_name = String(row[IDX.artist_name] ?? "").trim();
+    const rank = Number(row[IDX.rank]);
+    const monthly_listeners = Number(row[IDX.monthly_listeners]);
+    if (!artist_name) continue;
+    if (!Number.isFinite(rank) || rank < 1) continue;
+    if (!Number.isFinite(monthly_listeners)) continue;
+    out.push({ rank, artist_name, spotify_id, monthly_listeners });
+  }
+  return out;
 }
 
 async function upsertChunk(
@@ -124,23 +141,31 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Label with *tomorrow's* London date: the cron fires 1–2 hours before
-    // London midnight, and this snapshot is the one the app will read for
-    // the next London day.
     const snapshotDate = getTomorrowLondon();
-    const html = await fetchHtml(SOURCE_URL);
-    const allRows = parseRows(html);
+    const json = await fetchJson(SOURCE_URL);
+    const allRows = parseRows(json);
 
     if (allRows.length < TOP_N) {
       return Response.json(
         {
-          error: `Parsed ${allRows.length} rows, expected at least ${TOP_N}. Source HTML may have changed.`,
+          error: `Parsed ${allRows.length} rows, expected at least ${TOP_N}. Source schema may have changed.`,
+          sourceDate: json.date,
         },
         { status: 502 },
       );
     }
 
-    const top = allRows.slice(0, TOP_N);
+    // Sort ascending and take the top N. Source appears sorted already, but
+    // don't rely on that. Also dedupe by rank — the feed occasionally ships
+    // two rows at the same rank (different artists, chart position glitch),
+    // which would trip the (snapshot_date, rank) conflict target on upsert.
+    allRows.sort((a, b) => a.rank - b.rank);
+    const byRank = new Map<number, Row>();
+    for (const r of allRows) {
+      if (!byRank.has(r.rank)) byRank.set(r.rank, r);
+    }
+    const top = Array.from(byRank.values()).slice(0, TOP_N);
+
     const records = top.map((r) => ({
       snapshot_date: snapshotDate,
       rank: r.rank,
@@ -160,6 +185,7 @@ export async function GET(request: Request) {
     return Response.json({
       ok: true,
       snapshotDate,
+      sourceDate: json.date,
       inserted: records.length,
     });
   } catch (err) {

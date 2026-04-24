@@ -1,5 +1,5 @@
-// Scrapes the top 500 artists by Spotify monthly listeners from kworb.net
-// and upserts a dated snapshot into Supabase.
+// Scrapes the top 500 artists by Spotify monthly listeners from
+// music.eduardlupu.com and upserts a dated snapshot into Supabase.
 //
 // Usage:
 //   node scripts/scrape.js            # today's date (Europe/London)
@@ -11,13 +11,22 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const cheerio = require('cheerio');
 
-const SOURCE_URL = 'https://kworb.net/spotify/listeners.html';
+const SOURCE_URL = 'https://music.eduardlupu.com/data/latest/top500.json';
 const TOP_N = 500;
-// PostgREST batches larger than a few thousand rows can time out; 500 is well under the limit but we
-// chunk anyway to keep payloads small.
+// PostgREST batches larger than a few thousand rows can time out; 500 is well
+// under the limit but we chunk anyway to keep payloads small.
 const UPSERT_CHUNK = 500;
+
+// Indexes into each `row` entry in the source JSON. Matches the `fields`
+// array the API documents: ["i","n","p","r","ml", …].
+const IDX = {
+  spotify_id: 0,
+  artist_name: 1,
+  // 2 = image hash, unused
+  rank: 3,
+  monthly_listeners: 4,
+};
 
 function loadEnvLocal() {
   const envPath = path.join(__dirname, '..', '.env.local');
@@ -40,45 +49,6 @@ function loadEnvLocal() {
   }
 }
 
-function parseInteger(raw) {
-  const n = Number(String(raw).replace(/[,\s]/g, ''));
-  if (!Number.isFinite(n)) throw new Error(`Not a number: "${raw}"`);
-  return n;
-}
-
-function extractSpotifyId(href) {
-  // hrefs look like "artist/0du5cEVh5yTK9QJze8zA0C_songs.html"
-  const match = href && href.match(/artist\/([A-Za-z0-9]{22})/);
-  return match ? match[1] : null;
-}
-
-async function fetchHtml(url) {
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent':
-        'spotify-game-scraper/1.0 (+https://github.com/) contact: jack@thelivingcard.co.uk',
-    },
-  });
-  if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
-  return await res.text();
-}
-
-function parseRows(html) {
-  const $ = cheerio.load(html);
-  const rows = [];
-  $('table tbody tr').each((_, tr) => {
-    const cells = $(tr).find('td');
-    if (cells.length < 3) return;
-    const rank = parseInteger($(cells[0]).text());
-    const anchor = $(cells[1]).find('a').first();
-    const artistName = anchor.text().trim() || $(cells[1]).text().trim();
-    const spotifyId = extractSpotifyId(anchor.attr('href'));
-    const monthlyListeners = parseInteger($(cells[2]).text());
-    rows.push({ rank, artist_name: artistName, spotify_id: spotifyId, monthly_listeners: monthlyListeners });
-  });
-  return rows;
-}
-
 // Today's date in Europe/London as YYYY-MM-DD. Inlined here because this
 // CLI runs under plain `node` without a TS loader; the canonical version
 // lives in lib/dates.ts. Keep the two in sync.
@@ -95,6 +65,41 @@ function getTodayLondon() {
   return `${y}-${m}-${d}`;
 }
 
+async function fetchJson(url) {
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent':
+        'spotify-game-scraper/1.0 (+https://github.com/Doubfyre/spotify-game)',
+    },
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
+  return await res.json();
+}
+
+// Defensive parse — the API could in theory ship a row with a missing field
+// or a string where we expect a number. Skip malformed rows rather than
+// throwing the whole scrape away.
+function parseRows(json) {
+  if (!json || !Array.isArray(json.rows)) {
+    throw new Error('Unexpected response: missing "rows" array.');
+  }
+  const out = [];
+  for (const row of json.rows) {
+    if (!Array.isArray(row) || row.length <= IDX.monthly_listeners) continue;
+    const spotify_id =
+      typeof row[IDX.spotify_id] === 'string' ? row[IDX.spotify_id] : null;
+    const artist_name = String(row[IDX.artist_name] ?? '').trim();
+    const rank = Number(row[IDX.rank]);
+    const monthly_listeners = Number(row[IDX.monthly_listeners]);
+    if (!artist_name) continue;
+    if (!Number.isFinite(rank) || rank < 1) continue;
+    if (!Number.isFinite(monthly_listeners)) continue;
+    out.push({ rank, artist_name, spotify_id, monthly_listeners });
+  }
+  return out;
+}
+
 async function main() {
   loadEnvLocal();
 
@@ -108,8 +113,6 @@ async function main() {
   }
 
   // Guard against accidentally using the publishable (anon) key for writes.
-  // New-format keys: `sb_secret_...` = service_role, `sb_publishable_...` = anon.
-  // Legacy keys are JWTs and we can't cheaply tell them apart, so just pass those through.
   if (serviceKey.startsWith('sb_publishable_')) {
     console.error(
       'SUPABASE_SERVICE_ROLE_KEY is set to a publishable key (sb_publishable_...). ' +
@@ -130,18 +133,35 @@ async function main() {
   }
 
   console.log(`Fetching ${SOURCE_URL} ...`);
-  const html = await fetchHtml(SOURCE_URL);
+  const json = await fetchJson(SOURCE_URL);
+  if (json.date) console.log(`Source-reported date: ${json.date}`);
 
-  const allRows = parseRows(html);
+  const allRows = parseRows(json);
   console.log(`Parsed ${allRows.length} rows.`);
   if (allRows.length < TOP_N) {
-    throw new Error(`Expected at least ${TOP_N} rows, got ${allRows.length}. Page structure may have changed.`);
+    throw new Error(
+      `Expected at least ${TOP_N} rows, got ${allRows.length}. Source format may have changed.`,
+    );
   }
 
-  const top = allRows.slice(0, TOP_N);
+  // Sort by rank ascending and take the top N. The source appears sorted
+  // already but don't assume it. Also dedupe by rank — the feed has been
+  // observed to occasionally ship two rows at the same rank (different
+  // artists, same chart position glitch), which would trip the (snapshot_date,
+  // rank) conflict target on upsert.
+  allRows.sort((a, b) => a.rank - b.rank);
+  const byRank = new Map();
+  for (const r of allRows) {
+    if (!byRank.has(r.rank)) byRank.set(r.rank, r);
+    else console.warn(`Warning: duplicate rank ${r.rank} — keeping first ("${byRank.get(r.rank).artist_name}"), dropping "${r.artist_name}"`);
+  }
+  const top = Array.from(byRank.values()).slice(0, TOP_N);
+
   const missingIds = top.filter((r) => !r.spotify_id);
   if (missingIds.length > 0) {
-    console.warn(`Warning: ${missingIds.length} of top ${TOP_N} rows missing spotify_id (ranks: ${missingIds.map((r) => r.rank).join(', ')})`);
+    console.warn(
+      `Warning: ${missingIds.length} of top ${TOP_N} rows missing spotify_id (ranks: ${missingIds.map((r) => r.rank).join(', ')})`,
+    );
   }
 
   const records = top.map((r) => ({
