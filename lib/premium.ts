@@ -30,6 +30,15 @@
 //     ON public.profiles FOR UPDATE
 //     USING (auth.uid() = id);
 //
+//   -- Lets a signed-in user create their own profile row. Needed for the
+//   -- upsert-before-update pattern used when saving best scores / streaks,
+//   -- which is what keeps the save path self-healing for users whose row
+//   -- was never created by the handle_new_user trigger (i.e. anyone who
+//   -- signed up before that trigger existed).
+//   CREATE POLICY "users insert own profile"
+//     ON public.profiles FOR INSERT
+//     WITH CHECK (auth.uid() = id);
+//
 //   -- Auto-create a profile row whenever a user signs up. Runs as
 //   -- SECURITY DEFINER because the auth.users insert is happening under
 //   -- the supabase_auth role, which doesn't have write access to public.
@@ -44,6 +53,13 @@
 //   CREATE OR REPLACE TRIGGER on_auth_user_created
 //     AFTER INSERT ON auth.users
 //     FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+//
+//   -- One-time backfill for users who signed up before the trigger
+//   -- existed. Creates a profile row for every auth user that doesn't
+//   -- already have one; ON CONFLICT DO NOTHING makes it re-runnable.
+//   INSERT INTO public.profiles (id)
+//   SELECT id FROM auth.users
+//   ON CONFLICT (id) DO NOTHING;
 //
 // ---------------------------------------------------------------------
 // Features that will eventually be gated behind isPremium:

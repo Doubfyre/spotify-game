@@ -172,6 +172,13 @@ export default function HigherOrLowerGame({
           data: { user },
         } = await supa.auth.getUser();
         if (!user) return;
+        // Ensure a profile row exists before the conditional UPDATE —
+        // handle_new_user only fires for fresh signups, so accounts that
+        // predate the trigger have no row and the UPDATE would silently
+        // match 0 rows. ignoreDuplicates keeps this idempotent.
+        await supa
+          .from("profiles")
+          .upsert({ id: user.id }, { onConflict: "id", ignoreDuplicates: true });
         await supa
           .from("profiles")
           .update({ higher_lower_best_streak: final })

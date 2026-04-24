@@ -295,6 +295,14 @@ function Results({
           data: { user },
         } = await supa.auth.getUser();
         if (!user) return;
+        // Ensure a profile row exists before the conditional UPDATE.
+        // handle_new_user auto-creates a row for new signups, but accounts
+        // that predate that trigger have no row — and UPDATE would silently
+        // match 0 rows. Idempotent: if the row already exists, the upsert
+        // is a no-op (ignoreDuplicates prevents overwriting existing stats).
+        await supa
+          .from("profiles")
+          .upsert({ id: user.id }, { onConflict: "id", ignoreDuplicates: true });
         await supa
           .from("profiles")
           .update({ solo_best_score: total })
