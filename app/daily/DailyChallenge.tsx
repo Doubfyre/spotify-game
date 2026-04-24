@@ -45,8 +45,8 @@ function formatShareDate(iso: string): string {
 }
 
 function band(diff: number): "green" | "amber" | "red" {
-  if (diff < 30) return "green";
-  if (diff < 100) return "amber";
+  if (diff < 100) return "green";
+  if (diff < 200) return "amber";
   return "red";
 }
 
@@ -482,12 +482,6 @@ function Results({
     } else {
       intro = `I scored ${total} today - can you beat me?`;
     }
-    // Share-card emoji thresholds are looser than the in-game `band()`
-    // (30/100) on purpose — share text is a boastier channel, so a wider
-    // green bucket reads better.
-    const shareEmoji = (diff: number) =>
-      diff < 100 ? "🟢" : diff < 200 ? "🟡" : "🔴";
-
     const lines: string[] = [
       `🎵 The Spotify Game - Daily Challenge ${formatShareDate(snapshotDate)}`,
       "",
@@ -500,7 +494,7 @@ function Results({
     if (completed.rounds.length > 0) {
       lines.push("");
       completed.rounds.forEach((r, i) => {
-        lines.push(`Artist ${i + 1}: ${shareEmoji(r.diff)} ${r.diff} off`);
+        lines.push(`Artist ${i + 1}: ${bandEmoji(band(r.diff))} ${r.diff} off`);
       });
     }
 
