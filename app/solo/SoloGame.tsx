@@ -281,12 +281,15 @@ function Results({
 }) {
   const [copied, setCopied] = useState(false);
   // "pending" — show submit form; "submitted"/"skipped" — show leaderboard.
-  // The player name we submitted under (or null for skipped/anon) is
-  // passed to HighScoreLeaderboard for the "your row" highlight.
+  // submittedAs / submittedMetric reflect the row that actually exists
+  // in solo_scores for this player (may be an older, better score if
+  // the conditional upsert decided to keep it). Both are passed to
+  // HighScoreLeaderboard for the "your row" highlight.
   const [submitStatus, setSubmitStatus] = useState<
     "pending" | "submitted" | "skipped"
   >("pending");
   const [submittedAs, setSubmittedAs] = useState<string | null>(null);
+  const [submittedMetric, setSubmittedMetric] = useState<number | null>(null);
   const [initialName, setInitialName] = useState<string>("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const percent = Math.round((total / MAX_POSSIBLE) * 100);
@@ -367,10 +370,54 @@ function Results({
     const {
       data: { user },
     } = await supa.auth.getUser();
-    // user_id is optional on solo_scores — anon guests can still post a
-    // score under a display name.
+
+    if (user?.id) {
+      // Logged in: dedupe on user_id. Read existing best first — if the
+      // new score isn't strictly better, we leave the stored row alone
+      // (player keeps their record + original display name).
+      //
+      // Requires the partial unique index documented at the top of
+      // app/solo/page.tsx. Without it, upsert with onConflict errors out.
+      const { data: existing, error: readErr } = await supa
+        .from("solo_scores")
+        .select("player_name, score")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (readErr) {
+        console.error("[solo] solo_scores read failed", readErr);
+        throw new Error(readErr.message);
+      }
+      const existingRow = existing as
+        | { player_name: string; score: number }
+        | null;
+      const existingScore = existingRow?.score ?? null;
+      if (existingScore !== null && existingScore >= total) {
+        // Their stored best is already at least this good — don't
+        // overwrite. Highlight the existing row in the leaderboard.
+        setSubmittedAs(existingRow!.player_name);
+        setSubmittedMetric(existingScore);
+        setSubmitStatus("submitted");
+        return;
+      }
+      const { error } = await supa.from("solo_scores").upsert(
+        { user_id: user.id, player_name: name, score: total },
+        { onConflict: "user_id" },
+      );
+      if (error) {
+        console.error("[solo] solo_scores upsert failed", error);
+        throw new Error(error.message);
+      }
+      setSubmittedAs(name);
+      setSubmittedMetric(total);
+      setSubmitStatus("submitted");
+      return;
+    }
+
+    // Anonymous: no user_id means no dedupe target. Insert a new row.
+    // The leaderboard views collapse duplicate player_names client-side
+    // as a best-effort fallback.
     const { error } = await supa.from("solo_scores").insert({
-      user_id: user?.id ?? null,
+      user_id: null,
       player_name: name,
       score: total,
     });
@@ -379,6 +426,7 @@ function Results({
       throw new Error(error.message);
     }
     setSubmittedAs(name);
+    setSubmittedMetric(total);
     setSubmitStatus("submitted");
   }
 
@@ -474,7 +522,9 @@ function Results({
             metricColumn="score"
             metricLabel="Score"
             player={
-              submittedAs !== null ? { name: submittedAs, metric: total } : null
+              submittedAs !== null && submittedMetric !== null
+                ? { name: submittedAs, metric: submittedMetric }
+                : null
             }
           />
         )}

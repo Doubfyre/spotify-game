@@ -561,12 +561,60 @@ function Results({
       return;
     }
     setSubmitting(true);
-    const { error } = await supabase.from("daily_scores").insert({
-      snapshot_date: snapshotDate,
-      player_name: clean,
-      score: completed.total,
-      user_id: userId,
-    });
+
+    // Logged-in users: dedupe on (user_id, snapshot_date). Daily is
+    // lower-is-better, so if a row already exists for this user today
+    // we only overwrite when the new score is strictly lower. The UI
+    // normally prevents replay, but this also catches double-click and
+    // same-account cross-device submissions.
+    //
+    // Requires the partial unique index in app/daily/page.tsx.
+    let error: { message: string } | null = null;
+    if (userId) {
+      const { data: existing, error: readErr } = await supabase
+        .from("daily_scores")
+        .select("score")
+        .eq("user_id", userId)
+        .eq("snapshot_date", snapshotDate)
+        .maybeSingle();
+      if (readErr) {
+        setSubmitting(false);
+        setSubmitErr(readErr.message);
+        return;
+      }
+      const existingScore =
+        (existing as { score?: number } | null)?.score ?? null;
+      if (existingScore !== null && existingScore <= completed.total) {
+        // They already have an equal-or-better score for today. Treat
+        // as a successful submission so the UI transitions, but don't
+        // downgrade the stored row.
+        setSubmitting(false);
+        cacheLeaderboardName(clean);
+        onSubmitted(clean);
+        fetchLeaderboard();
+        return;
+      }
+      const { error: upsertErr } = await supabase.from("daily_scores").upsert(
+        {
+          snapshot_date: snapshotDate,
+          player_name: clean,
+          score: completed.total,
+          user_id: userId,
+        },
+        { onConflict: "user_id,snapshot_date" },
+      );
+      error = upsertErr;
+    } else {
+      // Anonymous: no user_id to dedupe on. Plain insert.
+      const { error: insertErr } = await supabase.from("daily_scores").insert({
+        snapshot_date: snapshotDate,
+        player_name: clean,
+        score: completed.total,
+        user_id: null,
+      });
+      error = insertErr;
+    }
+
     setSubmitting(false);
     if (error) {
       setSubmitErr(error.message);

@@ -396,6 +396,9 @@ function GameOver({
     "pending" | "submitted" | "skipped"
   >("pending");
   const [submittedAs, setSubmittedAs] = useState<string | null>(null);
+  // Metric actually stored (may reflect a higher existing streak if the
+  // conditional upsert decided to keep it). Drives the highlight.
+  const [submittedMetric, setSubmittedMetric] = useState<number | null>(null);
   const [initialName, setInitialName] = useState<string>("");
   const isNewBest = streak > 0 && streak >= best;
 
@@ -421,8 +424,51 @@ function GameOver({
     const {
       data: { user },
     } = await supa.auth.getUser();
+
+    if (user?.id) {
+      // Logged-in: one leaderboard row per user_id. Read existing best
+      // first — if the new streak isn't strictly better, keep the old
+      // row (player keeps their record + original display name).
+      //
+      // Requires the partial unique index documented at the top of
+      // app/higherorlower/page.tsx. Without it, upsert errors out.
+      const { data: existing, error: readErr } = await supa
+        .from("higher_lower_scores")
+        .select("player_name, streak")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (readErr) {
+        console.error("[hol] higher_lower_scores read failed", readErr);
+        throw new Error(readErr.message);
+      }
+      const existingRow = existing as
+        | { player_name: string; streak: number }
+        | null;
+      const existingStreak = existingRow?.streak ?? null;
+      if (existingStreak !== null && existingStreak >= streak) {
+        setSubmittedAs(existingRow!.player_name);
+        setSubmittedMetric(existingStreak);
+        setSubmitStatus("submitted");
+        return;
+      }
+      const { error } = await supa.from("higher_lower_scores").upsert(
+        { user_id: user.id, player_name: name, streak },
+        { onConflict: "user_id" },
+      );
+      if (error) {
+        console.error("[hol] higher_lower_scores upsert failed", error);
+        throw new Error(error.message);
+      }
+      setSubmittedAs(name);
+      setSubmittedMetric(streak);
+      setSubmitStatus("submitted");
+      return;
+    }
+
+    // Anonymous: plain insert, dedupe is best-effort client-side in the
+    // leaderboard views.
     const { error } = await supa.from("higher_lower_scores").insert({
-      user_id: user?.id ?? null,
+      user_id: null,
       player_name: name,
       streak,
     });
@@ -431,6 +477,7 @@ function GameOver({
       throw new Error(error.message);
     }
     setSubmittedAs(name);
+    setSubmittedMetric(streak);
     setSubmitStatus("submitted");
   }
   // Only show the final pairing reveal if the game actually ended on a
@@ -539,7 +586,9 @@ function GameOver({
             metricColumn="streak"
             metricLabel="Streak"
             player={
-              submittedAs !== null ? { name: submittedAs, metric: streak } : null
+              submittedAs !== null && submittedMetric !== null
+                ? { name: submittedAs, metric: submittedMetric }
+                : null
             }
           />
         )}

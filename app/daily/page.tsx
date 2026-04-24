@@ -7,17 +7,39 @@
 //   create table public.daily_scores (
 //     id            uuid primary key default gen_random_uuid(),
 //     snapshot_date date not null,
+//     user_id       uuid references auth.users(id),
 //     player_name   text not null check (char_length(player_name) between 1 and 20),
 //     score         int  not null check (score >= 0),
 //     created_at    timestamptz not null default now()
 //   );
 //   create index daily_scores_date_score_idx
 //     on public.daily_scores (snapshot_date, score asc);
-//   grant select, insert on table public.daily_scores to anon, authenticated;
-//   grant all          on table public.daily_scores to service_role;
+//   create index daily_scores_user_id_idx on public.daily_scores (user_id);
+//   grant select, insert, update on table public.daily_scores to anon, authenticated;
+//   grant all                     on table public.daily_scores to service_role;
 //   alter table public.daily_scores enable row level security;
 //   create policy "public read"   on public.daily_scores for select using (true);
 //   create policy "public insert" on public.daily_scores for insert with check (true);
+//   create policy "public update" on public.daily_scores for update using (true);
+//
+//   -- Dedupe: at most one row per signed-in player per day. Partial
+//   -- index so anonymous submissions (user_id NULL) aren't constrained.
+//   -- Required for the ON CONFLICT (user_id, snapshot_date) upsert in
+//   -- DailyChallenge.tsx.
+//   create unique index daily_scores_user_day_idx
+//     on public.daily_scores (user_id, snapshot_date) where user_id is not null;
+//
+// One-time cleanup before creating the unique index if the table has
+// duplicate (user_id, snapshot_date) rows — keep the best (lowest)
+// score per user per day:
+//
+//   with ranked as (
+//     select id,
+//            row_number() over (partition by user_id, snapshot_date order by score asc, created_at asc) as rn
+//     from public.daily_scores
+//     where user_id is not null
+//   )
+//   delete from public.daily_scores where id in (select id from ranked where rn > 1);
 //
 //   -- Artists already used in a daily challenge (cooldown ledger).
 //   -- unique(spotify_id, used_on) lets the server safely re-insert on

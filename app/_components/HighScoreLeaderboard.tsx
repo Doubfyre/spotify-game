@@ -23,7 +23,25 @@ type Row = {
 type Tab = "all" | "today";
 
 const TOP_LIMIT = 10;
+// Over-fetch so that after collapsing duplicate player_names we still
+// have enough distinct rows to fill the top 10. Logged-in rows are
+// unique per user via the DB partial index; this covers anon submits.
+const OVER_FETCH = TOP_LIMIT * 4;
 const POLL_MS = 30_000;
+
+// Collapses duplicate player_names to one row each, keeping the best
+// metric (higher-is-better in this component). Input should already be
+// sorted best-first, which makes the first occurrence per name the one
+// to keep. Case-insensitive match so "jack" and "Jack" collapse.
+function dedupeByName(rows: Row[]): Row[] {
+  const best = new Map<string, Row>();
+  for (const r of rows) {
+    const key = r.player_name.toLowerCase();
+    const prev = best.get(key);
+    if (!prev || r.metric > prev.metric) best.set(key, r);
+  }
+  return Array.from(best.values()).slice(0, TOP_LIMIT);
+}
 
 export default function HighScoreLeaderboard({
   table,
@@ -59,14 +77,14 @@ export default function HighScoreLeaderboard({
       .select(`player_name, ${metricColumn}, created_at`)
       .order(metricColumn, { ascending: false })
       .order("created_at", { ascending: true }) // ties: earliest wins
-      .limit(TOP_LIMIT);
+      .limit(OVER_FETCH);
     const topToday = supabase
       .from(table)
       .select(`player_name, ${metricColumn}, created_at`)
       .gte("created_at", todayStartISO)
       .order(metricColumn, { ascending: false })
       .order("created_at", { ascending: true })
-      .limit(TOP_LIMIT);
+      .limit(OVER_FETCH);
     const rankAll = player
       ? supabase
           .from(table)
@@ -109,8 +127,8 @@ export default function HighScoreLeaderboard({
         created_at: String(r.created_at ?? ""),
       }));
 
-    setAllRows(normalise((a.data ?? []) as unknown[]));
-    setTodayRows(normalise((t.data ?? []) as unknown[]));
+    setAllRows(dedupeByName(normalise((a.data ?? []) as unknown[])));
+    setTodayRows(dedupeByName(normalise((t.data ?? []) as unknown[])));
     const raCount = (ra as { count: number | null }).count;
     const rtCount = (rt as { count: number | null }).count;
     setAllRank(player && raCount !== null ? raCount + 1 : null);

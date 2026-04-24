@@ -18,6 +18,10 @@ export type HomeLeaderboardVariant = "solo" | "daily" | "higherlower";
 type Row = { player_name: string; metric: number };
 
 const TOP_LIMIT = 5;
+// Over-fetch so there's enough to dedupe by player_name and still show
+// a full top 5. Logged-in rows are already unique per user via the DB
+// partial index; this covers anonymous submissions.
+const OVER_FETCH = 25;
 
 // Per-variant fetch. Returns [allTime, today] or throws on first error.
 async function fetchForVariant(
@@ -36,15 +40,15 @@ async function fetchForVariant(
         .select("player_name, score")
         .order("score", { ascending: false })
         .order("created_at", { ascending: true })
-        .limit(TOP_LIMIT);
+        .limit(OVER_FETCH);
     const [a, t] = await Promise.all([
       base(),
       base().gte("created_at", todayStartISO),
     ]);
     throwIfError(a.error, t.error);
     return {
-      all: normalise(a.data as unknown[], "score"),
-      today: normalise(t.data as unknown[], "score"),
+      all: collapse(normalise(a.data as unknown[], "score"), "desc"),
+      today: collapse(normalise(t.data as unknown[], "score"), "desc"),
     };
   }
   if (variant === "higherlower") {
@@ -54,15 +58,15 @@ async function fetchForVariant(
         .select("player_name, streak")
         .order("streak", { ascending: false })
         .order("created_at", { ascending: true })
-        .limit(TOP_LIMIT);
+        .limit(OVER_FETCH);
     const [a, t] = await Promise.all([
       base(),
       base().gte("created_at", todayStartISO),
     ]);
     throwIfError(a.error, t.error);
     return {
-      all: normalise(a.data as unknown[], "streak"),
-      today: normalise(t.data as unknown[], "streak"),
+      all: collapse(normalise(a.data as unknown[], "streak"), "desc"),
+      today: collapse(normalise(t.data as unknown[], "streak"), "desc"),
     };
   }
   // daily
@@ -72,15 +76,15 @@ async function fetchForVariant(
       .select("player_name, score")
       .order("score", { ascending: true })
       .order("created_at", { ascending: true })
-      .limit(TOP_LIMIT);
+      .limit(OVER_FETCH);
   const [a, t] = await Promise.all([
     base(),
     base().eq("snapshot_date", snapshot),
   ]);
   throwIfError(a.error, t.error);
   return {
-    all: normalise(a.data as unknown[], "score"),
-    today: normalise(t.data as unknown[], "score"),
+    all: collapse(normalise(a.data as unknown[], "score"), "asc"),
+    today: collapse(normalise(t.data as unknown[], "score"), "asc"),
   };
 }
 
@@ -89,6 +93,28 @@ function normalise(rows: unknown[], col: "score" | "streak"): Row[] {
     player_name: String(r.player_name ?? ""),
     metric: Number(r[col] ?? 0),
   }));
+}
+
+// Collapses duplicate player_names to one row each, keeping the best
+// metric in the given direction. Input order is preserved among kept
+// rows (the first-seen wins on metric ties), then truncated to the
+// display limit. Case-insensitive match so "jack" and "Jack" collapse.
+function collapse(rows: Row[], direction: "asc" | "desc"): Row[] {
+  const best = new Map<string, Row>();
+  for (const r of rows) {
+    const key = r.player_name.toLowerCase();
+    const prev = best.get(key);
+    if (!prev) {
+      best.set(key, r);
+      continue;
+    }
+    const prevIsBetter =
+      direction === "desc" ? prev.metric >= r.metric : prev.metric <= r.metric;
+    if (!prevIsBetter) best.set(key, r);
+  }
+  // Array.from preserves insertion order; input was already sorted so
+  // the Map naturally holds the best-per-name in rank order.
+  return Array.from(best.values()).slice(0, TOP_LIMIT);
 }
 
 function throwIfError(

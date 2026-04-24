@@ -21,10 +21,29 @@
 //   );
 //   create index higher_lower_scores_streak_idx on public.higher_lower_scores (streak desc);
 //   create index higher_lower_scores_created_idx on public.higher_lower_scores (created_at desc);
-//   grant select, insert on public.higher_lower_scores to anon, authenticated;
+//   grant select, insert, update on public.higher_lower_scores to anon, authenticated;
 //   alter table public.higher_lower_scores enable row level security;
 //   create policy "public read" on public.higher_lower_scores for select using (true);
 //   create policy "public insert" on public.higher_lower_scores for insert with check (true);
+//   create policy "public update" on public.higher_lower_scores for update using (true);
+//
+//   -- Dedupe: one leaderboard row per signed-in player. Partial index so
+//   -- anonymous submissions (user_id NULL) aren't constrained. Required
+//   -- for the ON CONFLICT (user_id) upsert in HigherOrLowerGame.tsx.
+//   create unique index higher_lower_scores_user_idx
+//     on public.higher_lower_scores (user_id) where user_id is not null;
+//
+// One-time cleanup if the table already has multiple rows per user from
+// the old insert-every-run flow. Run BEFORE creating the unique index
+// (the index creation will fail if duplicates still exist).
+//
+//   with ranked as (
+//     select id,
+//            row_number() over (partition by user_id order by streak desc, created_at asc) as rn
+//     from public.higher_lower_scores
+//     where user_id is not null
+//   )
+//   delete from public.higher_lower_scores where id in (select id from ranked where rn > 1);
 
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
