@@ -25,6 +25,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import ArtistAvatar from "@/app/_components/ArtistAvatar";
 import {
   Suspense,
   useCallback,
@@ -74,6 +75,7 @@ type PartyPick = {
   input: string;
   spotify_id: string | null;
   artist_name: string | null;
+  image_hash: string | null;
   rank: number | null;
   points: number;
   created_at: string;
@@ -432,6 +434,7 @@ function OnlinePartyInner({
       input: trimmed,
       spotify_id: match?.spotify_id ?? null,
       artist_name: match?.artist_name ?? null,
+      image_hash: match?.image_hash ?? null,
       rank: match?.rank ?? null,
       points,
     });
@@ -448,6 +451,7 @@ function OnlinePartyInner({
       input: "",
       spotify_id: null,
       artist_name: null,
+      image_hash: null,
       rank: null,
       points: 0,
     });
@@ -460,6 +464,7 @@ function OnlinePartyInner({
       input: string;
       spotify_id: string | null;
       artist_name: string | null;
+      image_hash: string | null;
       rank: number | null;
       points: number;
     },
@@ -1194,16 +1199,28 @@ function LastPickCard({
   playerName: string;
 }) {
   return (
-    <div className="mt-6 bg-surface border border-border rounded-lg p-5 flex items-center justify-between">
-      <div className="min-w-0">
-        <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted">
-          {playerName} picked
-        </div>
-        <div className="truncate text-foreground font-medium mt-1">
-          {pick.artist_name ?? `"${pick.input}"`}
-        </div>
+    <div
+      // key on pick.id replays the reveal animation each time a new pick
+      // streams in over realtime.
+      key={pick.id}
+      className="mt-6 bg-surface border border-border rounded-lg p-6 text-center animate-modal-scale-in"
+    >
+      <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted">
+        {playerName} picked
       </div>
-      <div className="flex items-center gap-5 shrink-0">
+      {pick.artist_name && (
+        <div className="flex justify-center mt-4 mb-4">
+          <ArtistAvatar
+            imageHash={pick.image_hash}
+            alt={pick.artist_name}
+            size={120}
+          />
+        </div>
+      )}
+      <div className="text-foreground font-medium text-lg mt-3">
+        {pick.artist_name ?? `"${pick.input}"`}
+      </div>
+      <div className="flex items-center justify-center gap-4 mt-3">
         {pick.rank !== null ? (
           <span className="font-mono text-[11px] text-muted">
             Rank #{pick.rank}
@@ -1214,7 +1231,7 @@ function LastPickCard({
           </span>
         )}
         <span
-          className={`font-display text-[26px] leading-none w-16 text-right ${pick.points > 0 ? "text-spotify" : "text-muted"}`}
+          className={`font-display text-[26px] leading-none ${pick.points > 0 ? "text-spotify" : "text-muted"}`}
         >
           +{pick.points}
         </span>

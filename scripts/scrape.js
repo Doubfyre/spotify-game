@@ -8,6 +8,9 @@
 // Required env (loaded from .env.local):
 //   NEXT_PUBLIC_SUPABASE_URL
 //   SUPABASE_SERVICE_ROLE_KEY
+//
+// One-time DB migration (run in Supabase SQL editor):
+//   ALTER TABLE public.artist_snapshots ADD COLUMN IF NOT EXISTS image_hash text;
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -23,7 +26,7 @@ const UPSERT_CHUNK = 500;
 const IDX = {
   spotify_id: 0,
   artist_name: 1,
-  // 2 = image hash, unused
+  image_hash: 2,
   rank: 3,
   monthly_listeners: 4,
 };
@@ -90,12 +93,16 @@ function parseRows(json) {
     const spotify_id =
       typeof row[IDX.spotify_id] === 'string' ? row[IDX.spotify_id] : null;
     const artist_name = String(row[IDX.artist_name] ?? '').trim();
+    const image_hash =
+      typeof row[IDX.image_hash] === 'string' && row[IDX.image_hash]
+        ? row[IDX.image_hash]
+        : null;
     const rank = Number(row[IDX.rank]);
     const monthly_listeners = Number(row[IDX.monthly_listeners]);
     if (!artist_name) continue;
     if (!Number.isFinite(rank) || rank < 1) continue;
     if (!Number.isFinite(monthly_listeners)) continue;
-    out.push({ rank, artist_name, spotify_id, monthly_listeners });
+    out.push({ rank, artist_name, spotify_id, image_hash, monthly_listeners });
   }
   return out;
 }
@@ -169,6 +176,7 @@ async function main() {
     rank: r.rank,
     spotify_id: r.spotify_id,
     artist_name: r.artist_name,
+    image_hash: r.image_hash,
     monthly_listeners: r.monthly_listeners,
   }));
 

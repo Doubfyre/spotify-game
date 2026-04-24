@@ -34,5 +34,6 @@ export type ArtistRow = {
   rank: number;
   artist_name: string;
   spotify_id: string | null;
+  image_hash: string | null;
 };
 

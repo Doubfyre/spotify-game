@@ -9,7 +9,7 @@ export default async function PassPlayPage() {
   const snapshotDate = getTodayLondon();
   const { data, error } = await supabase
     .from("artist_snapshots")
-    .select("rank, artist_name, spotify_id")
+    .select("rank, artist_name, spotify_id, image_hash")
     .eq("snapshot_date", snapshotDate)
     .lte("rank", 500)
     .order("rank", { ascending: true });

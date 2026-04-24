@@ -15,6 +15,9 @@
  * Note: the parsing logic is duplicated with scripts/scrape.js. Sharing it
  * would require adding a TS runtime for the CLI script (tsx/ts-node) — not
  * worth a new dep. If the source schema changes, update both.
+ *
+ * One-time DB migration (run in Supabase SQL editor):
+ *   ALTER TABLE public.artist_snapshots ADD COLUMN IF NOT EXISTS image_hash text;
  */
 
 import { getTomorrowLondon } from "@/lib/dates";
@@ -32,7 +35,7 @@ const UPSERT_CHUNK = 500;
 const IDX = {
   spotify_id: 0,
   artist_name: 1,
-  // 2 = image hash, unused
+  image_hash: 2,
   rank: 3,
   monthly_listeners: 4,
 };
@@ -41,6 +44,7 @@ type Row = {
   rank: number;
   artist_name: string;
   spotify_id: string | null;
+  image_hash: string | null;
   monthly_listeners: number;
 };
 
@@ -80,12 +84,16 @@ function parseRows(json: SourceJson): Row[] {
         ? (row[IDX.spotify_id] as string)
         : null;
     const artist_name = String(row[IDX.artist_name] ?? "").trim();
+    const image_hash =
+      typeof row[IDX.image_hash] === "string" && row[IDX.image_hash]
+        ? (row[IDX.image_hash] as string)
+        : null;
     const rank = Number(row[IDX.rank]);
     const monthly_listeners = Number(row[IDX.monthly_listeners]);
     if (!artist_name) continue;
     if (!Number.isFinite(rank) || rank < 1) continue;
     if (!Number.isFinite(monthly_listeners)) continue;
-    out.push({ rank, artist_name, spotify_id, monthly_listeners });
+    out.push({ rank, artist_name, spotify_id, image_hash, monthly_listeners });
   }
   return out;
 }
@@ -171,6 +179,7 @@ export async function GET(request: Request) {
       rank: r.rank,
       spotify_id: r.spotify_id,
       artist_name: r.artist_name,
+      image_hash: r.image_hash,
       monthly_listeners: r.monthly_listeners,
     }));
 

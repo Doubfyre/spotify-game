@@ -38,12 +38,17 @@
 //     input        text not null,
 //     spotify_id   text,
 //     artist_name  text,
+//     image_hash   text,
 //     rank         int,
 //     points       int  not null default 0,
 //     created_at   timestamptz not null default now(),
 //     unique (room_code, player_id, round)
 //   );
 //   create index party_picks_room_idx on public.party_picks (room_code);
+//
+//   -- If the party_picks table already exists from an earlier deploy, add
+//   -- the image column separately:
+//   alter table public.party_picks add column if not exists image_hash text;
 //
 //   -- Grants (service_role has all by default)
 //   grant select, insert, update, delete on public.party_rooms    to authenticated;
@@ -122,7 +127,7 @@ export default async function OnlinePartyPage() {
   const snapshotDate = getTodayLondon();
   const { data: artists } = await dbReadOnly
     .from("artist_snapshots")
-    .select("rank, artist_name, spotify_id")
+    .select("rank, artist_name, spotify_id, image_hash")
     .eq("snapshot_date", snapshotDate)
     .lte("rank", 500)
     .order("rank", { ascending: true });

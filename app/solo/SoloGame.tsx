@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArtistRow } from "@/lib/supabase";
 import { fuzzyFind } from "@/lib/fuzzy";
+import ArtistAvatar from "@/app/_components/ArtistAvatar";
 
 const TOTAL_ROUNDS = 5;
 // Perfect game = the five highest-scoring picks, i.e. ranks 500, 499, 498,
@@ -196,9 +197,16 @@ function PickRow({
         </span>
         {pick ? (
           pick.matched ? (
-            <span className="truncate text-foreground font-medium">
-              {pick.matched.artist_name}
-            </span>
+            <>
+              <ArtistAvatar
+                imageHash={pick.matched.image_hash}
+                alt={pick.matched.artist_name}
+                size={40}
+              />
+              <span className="truncate text-foreground font-medium">
+                {pick.matched.artist_name}
+              </span>
+            </>
           ) : (
             <span className="truncate text-muted italic font-light">
               &ldquo;{pick.input}&rdquo;

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArtistRow } from "@/lib/supabase";
 import { fuzzyFind } from "@/lib/fuzzy";
+import ArtistAvatar from "@/app/_components/ArtistAvatar";
 
 type Player = {
   id: string;
@@ -548,6 +549,15 @@ function RevealScreen({
           <div className="font-mono text-[11px] tracking-[3px] uppercase text-muted mb-4">
             {pick.playerName} picked
           </div>
+          {pick.matched && (
+            <div className="flex justify-center mb-5 animate-modal-scale-in">
+              <ArtistAvatar
+                imageHash={pick.matched.image_hash}
+                alt={pick.matched.artist_name}
+                size={120}
+              />
+            </div>
+          )}
           <div className="font-display tracking-[2px] text-foreground mb-6"
             style={{ fontSize: "clamp(32px, 6vw, 56px)" }}
           >

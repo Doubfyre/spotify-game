@@ -146,7 +146,7 @@ export default async function DailyPage() {
   // 1. Today's top 500.
   const { data: artistData, error: artistErr } = await supabase
     .from("artist_snapshots")
-    .select("rank, artist_name, spotify_id")
+    .select("rank, artist_name, spotify_id, image_hash")
     .eq("snapshot_date", snapshotDate)
     .lte("rank", 500)
     .order("rank", { ascending: true });
@@ -217,10 +217,12 @@ export default async function DailyPage() {
     snapshotDate,
   );
 
-  // Strip spotify_id before handing to the client — it doesn't need it.
+  // Strip spotify_id before handing to the client — it doesn't need it —
+  // but pass image_hash through so the reveal can show the artist's photo.
   const clientPicks: ArtistPick[] = picks.map((p) => ({
     rank: p.rank,
     artist_name: p.artist_name,
+    image_hash: p.image_hash,
   }));
 
   return (

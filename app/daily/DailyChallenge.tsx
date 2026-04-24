@@ -4,8 +4,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase, createBrowserSupabase } from "@/lib/supabase";
 import { getTodayLondon } from "@/lib/dates";
+import ArtistAvatar from "@/app/_components/ArtistAvatar";
 
-export type ArtistPick = { rank: number; artist_name: string };
+export type ArtistPick = {
+  rank: number;
+  artist_name: string;
+  image_hash: string | null;
+};
 
 type Round = {
   artist: string;
@@ -190,6 +195,15 @@ export default function DailyChallenge({
               <span className="w-6 h-px bg-spotify" />
               Artist {currentIdx + 1} / {TOTAL_ROUNDS}
             </div>
+            {/* key forces remount when the round advances, so the reveal
+               animation replays on each new artist */}
+            <ArtistAvatar
+              key={currentPick.artist_name}
+              imageHash={currentPick.image_hash}
+              alt={currentPick.artist_name}
+              size={120}
+              className="mb-5 animate-modal-scale-in"
+            />
             <h1
               className="font-display leading-none tracking-[2px] text-foreground"
               style={{ fontSize: "clamp(48px, 9vw, 96px)" }}
