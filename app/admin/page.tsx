@@ -7,6 +7,7 @@ import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { getTodayLondon, addDays } from "@/lib/dates";
 import { isAdminEmail } from "@/lib/admin";
+import AutoRefresh from "./AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -179,6 +180,7 @@ export default async function AdminPage() {
 
   return (
     <main className="flex-1 px-5 sm:px-10 pt-32 pb-16">
+      <AutoRefresh />
       <div className="w-full max-w-5xl mx-auto">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
