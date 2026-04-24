@@ -121,7 +121,7 @@ export default function ModesSection({
 
   return (
     <>
-      <div className="h-full flex flex-col gap-2 sm:gap-4">
+      <div className="flex-1 flex flex-col gap-2 sm:gap-4 min-h-0">
         <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 min-h-0">
           {MODES.map((mode, i) => (
             <ModeCard
@@ -462,8 +462,8 @@ function CountdownDisplay() {
 function PartyVisual() {
   return (
     <div className="text-center">
-      <div className="font-mono text-[10px] sm:text-[12px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted leading-tight">
-        Play with up to 8 friends
+      <div className="font-mono text-[10px] sm:text-[12px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted leading-tight whitespace-nowrap">
+        Up to 8 players
       </div>
       <div className="mt-1 sm:mt-3 font-mono text-[9px] sm:text-[10px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted">
         Pass &amp; Play or Online

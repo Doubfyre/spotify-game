@@ -138,9 +138,11 @@ export default async function Home() {
       </section>
 
       {/* BOTTOM ~60%: mode cards. ModesSection handles the modal state.
-          `flex-1` on mobile so the grid fills remaining viewport height
-          instead of leaving a dead gap under the last row of cards. */}
-      <section className="relative z-[2] flex-1 md:flex-[6] px-5 sm:px-10 pb-3 sm:pb-6 md:pb-10 min-h-0">
+          `flex-1 flex flex-col` on mobile so the grid fills remaining
+          viewport height — `h-full` alone doesn't compute because the
+          main's height comes from `min-h-[100dvh]` (not a definite
+          height), so we thread the flex chain all the way down. */}
+      <section className="relative z-[2] flex-1 md:flex-[6] flex flex-col px-5 sm:px-10 pb-3 sm:pb-6 md:pb-10 min-h-0">
         <ModesSection
           todaySnapshot={snapshot}
           todayTag={tag}
