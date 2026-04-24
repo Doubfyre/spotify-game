@@ -172,22 +172,41 @@ export default function HigherOrLowerGame({
           data: { user },
         } = await supa.auth.getUser();
         if (!user) return;
-        // Ensure a profile row exists before the conditional UPDATE —
-        // handle_new_user only fires for fresh signups, so accounts that
-        // predate the trigger have no row and the UPDATE would silently
-        // match 0 rows. ignoreDuplicates keeps this idempotent.
-        await supa
+        // Ensure a profile row exists. Idempotent — if the row already
+        // exists, ignoreDuplicates makes this a no-op.
+        const { error: upsertErr } = await supa
           .from("profiles")
           .upsert({ id: user.id }, { onConflict: "id", ignoreDuplicates: true });
-        await supa
+        if (upsertErr) {
+          console.error("[hol] profiles upsert failed", upsertErr);
+          return;
+        }
+        // Read-then-write instead of atomic `.update().or(...)`. The
+        // combined filter was failing silently (PostgREST returns errors
+        // as `{ error }`, not throws), and for an end-of-game one-shot
+        // the race cost of two requests is nil.
+        const { data: prof, error: readErr } = await supa
+          .from("profiles")
+          .select("higher_lower_best_streak")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (readErr) {
+          console.error("[hol] profiles read failed", readErr);
+          return;
+        }
+        const currentBest =
+          (prof as { higher_lower_best_streak: number | null } | null)
+            ?.higher_lower_best_streak ?? null;
+        if (currentBest !== null && currentBest >= final) return;
+        const { error: writeErr } = await supa
           .from("profiles")
           .update({ higher_lower_best_streak: final })
-          .eq("id", user.id)
-          .or(
-            `higher_lower_best_streak.is.null,higher_lower_best_streak.lt.${final}`,
-          );
-      } catch {
-        // Network/auth issue — localStorage still has the record
+          .eq("id", user.id);
+        if (writeErr) {
+          console.error("[hol] profiles write failed", writeErr);
+        }
+      } catch (err) {
+        console.error("[hol] save best streak threw", err);
       }
     })();
     // `best` is intentionally excluded from deps — reading a stale snapshot

@@ -295,21 +295,43 @@ function Results({
           data: { user },
         } = await supa.auth.getUser();
         if (!user) return;
-        // Ensure a profile row exists before the conditional UPDATE.
-        // handle_new_user auto-creates a row for new signups, but accounts
-        // that predate that trigger have no row — and UPDATE would silently
-        // match 0 rows. Idempotent: if the row already exists, the upsert
-        // is a no-op (ignoreDuplicates prevents overwriting existing stats).
-        await supa
+        // Ensure a profile row exists. Idempotent — if the row already
+        // exists, ignoreDuplicates makes this a no-op and leaves existing
+        // stats untouched.
+        const { error: upsertErr } = await supa
           .from("profiles")
           .upsert({ id: user.id }, { onConflict: "id", ignoreDuplicates: true });
-        await supa
+        if (upsertErr) {
+          console.error("[solo] profiles upsert failed", upsertErr);
+          return;
+        }
+        // Read-then-write. Previously used an atomic `.update().or(...)`
+        // conditional filter, but it was failing silently — either from
+        // the combined filter URL mis-parsing or from PostgREST returning
+        // `{ error }` (which our try/catch never caught). Two requests is
+        // fine here: this only runs once at the end of a game, per user.
+        const { data: prof, error: readErr } = await supa
+          .from("profiles")
+          .select("solo_best_score")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (readErr) {
+          console.error("[solo] profiles read failed", readErr);
+          return;
+        }
+        const currentBest =
+          (prof as { solo_best_score: number | null } | null)
+            ?.solo_best_score ?? null;
+        if (currentBest !== null && currentBest >= total) return;
+        const { error: writeErr } = await supa
           .from("profiles")
           .update({ solo_best_score: total })
-          .eq("id", user.id)
-          .or(`solo_best_score.is.null,solo_best_score.lt.${total}`);
-      } catch {
-        // Network/auth issue — localStorage still has the record
+          .eq("id", user.id);
+        if (writeErr) {
+          console.error("[solo] profiles write failed", writeErr);
+        }
+      } catch (err) {
+        console.error("[solo] save best score threw", err);
       }
     })();
   }, [total]);

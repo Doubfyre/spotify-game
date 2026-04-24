@@ -4,6 +4,45 @@
 // canonical call site as we add paid features.
 //
 // ---------------------------------------------------------------------
+// RLS diagnostic + fix (run this block in the Supabase SQL editor if
+// solo_best_score / higher_lower_best_streak are staying NULL after a
+// game). The update policy as originally written relied on the implicit
+// USING-as-WITH-CHECK fallback, which is brittle; the fix below makes
+// both clauses explicit, scopes the policy to authenticated, and re-
+// grants UPDATE at the table level so no column-level grant is missing.
+//
+//   -- 1) Inspect existing policies + grants
+//   SELECT polname, polcmd,
+//          pg_get_expr(polqual, polrelid)      AS using_clause,
+//          pg_get_expr(polwithcheck, polrelid) AS check_clause
+//   FROM pg_policy
+//   WHERE polrelid = 'public.profiles'::regclass;
+//
+//   SELECT grantee, privilege_type
+//   FROM information_schema.table_privileges
+//   WHERE table_schema = 'public' AND table_name = 'profiles';
+//
+//   -- 2) Replace the UPDATE policy with an explicit USING + WITH CHECK,
+//   --    scoped to authenticated users only.
+//   DROP POLICY IF EXISTS "users update own profile" ON public.profiles;
+//   CREATE POLICY "users update own profile"
+//     ON public.profiles FOR UPDATE
+//     TO authenticated
+//     USING (auth.uid() = id)
+//     WITH CHECK (auth.uid() = id);
+//
+//   -- 3) Make sure the table-level UPDATE grant exists for authenticated.
+//   --    (Column-level grants would silently block new columns; this is
+//   --    the belt-and-braces fix.)
+//   GRANT UPDATE ON public.profiles TO authenticated;
+//
+//   -- 4) Sanity check: should return one row per authenticated signed-in
+//   --    user matching the policy.
+//   SELECT id, solo_best_score, higher_lower_best_streak
+//   FROM public.profiles
+//   WHERE id = auth.uid();
+//
+// ---------------------------------------------------------------------
 // Required Supabase migration. Run this in the SQL editor:
 //
 //   -- auth.users is managed by Supabase and can't be altered directly,
@@ -25,10 +64,17 @@
 //   ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 //   CREATE POLICY "users read own profile"
 //     ON public.profiles FOR SELECT
+//     TO authenticated
 //     USING (auth.uid() = id);
+//   -- UPDATE policy needs BOTH clauses: USING filters which rows the user
+//   -- can touch, WITH CHECK validates the row's post-update state. Leaving
+//   -- WITH CHECK implicit has caused silent update failures in the past.
 //   CREATE POLICY "users update own profile"
 //     ON public.profiles FOR UPDATE
-//     USING (auth.uid() = id);
+//     TO authenticated
+//     USING (auth.uid() = id)
+//     WITH CHECK (auth.uid() = id);
+//   GRANT UPDATE ON public.profiles TO authenticated;
 //
 //   -- Lets a signed-in user create their own profile row. Needed for the
 //   -- upsert-before-update pattern used when saving best scores / streaks,
