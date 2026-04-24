@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ArtistRow } from "@/lib/supabase";
+import { createBrowserSupabase, type ArtistRow } from "@/lib/supabase";
 import { fuzzyFind } from "@/lib/fuzzy";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
 
@@ -273,6 +273,11 @@ function Results({
   // Save personal best. Results mounts once per completed game; if the user
   // clicks "Play again" this component unmounts and remounts on the next
   // game's end, so this effect fires exactly when we want it to.
+  //
+  // localStorage write is unconditional (benefits anon users + acts as a
+  // cache for signed-in users). Server write uses an atomic conditional
+  // UPDATE — Postgres only writes if the new total beats the existing
+  // solo_best_score (or it's null), so no read-before-write race.
   useEffect(() => {
     try {
       const raw = localStorage.getItem("solo-best-score");
@@ -283,6 +288,22 @@ function Results({
     } catch {
       // localStorage disabled — skip silently
     }
+    (async () => {
+      try {
+        const supa = createBrowserSupabase();
+        const {
+          data: { user },
+        } = await supa.auth.getUser();
+        if (!user) return;
+        await supa
+          .from("profiles")
+          .update({ solo_best_score: total })
+          .eq("id", user.id)
+          .or(`solo_best_score.is.null,solo_best_score.lt.${total}`);
+      } catch {
+        // Network/auth issue — localStorage still has the record
+      }
+    })();
   }, [total]);
 
   async function share() {

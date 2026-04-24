@@ -1,5 +1,6 @@
 import ModesSection from "./_components/ModesSection";
 import { getTodayLondon } from "@/lib/dates";
+import { createServerSupabase } from "@/lib/supabase-server";
 
 // Deterministic floating-number config. Hardcoded (not Math.random()) so the
 // server-rendered markup matches the client render — avoids a hydration
@@ -50,8 +51,32 @@ function todayLondon(): { snapshot: string; tag: string } {
   return { snapshot, tag: `${dd} ${MONTHS_SHORT[mm - 1]}` };
 }
 
-export default function Home() {
+export default async function Home() {
   const { snapshot, tag } = todayLondon();
+
+  // Cross-device "completed today" check: for logged-in users, the source
+  // of truth is a row in daily_scores. Falls back to the client's
+  // localStorage check inside ModesSection for anonymous visitors.
+  let serverDailyCompleted = false;
+  try {
+    const supabase = await createServerSupabase();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data } = await supabase
+        .from("daily_scores")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("snapshot_date", snapshot)
+        .limit(1)
+        .maybeSingle();
+      if (data) serverDailyCompleted = true;
+    }
+  } catch {
+    // Auth/query failure should not block the homepage — card just falls
+    // back to localStorage detection.
+  }
 
   return (
     <main className="relative flex flex-col min-h-[100dvh] md:h-[100dvh] md:overflow-hidden pt-[80px]">
@@ -114,7 +139,11 @@ export default function Home() {
 
       {/* BOTTOM ~60%: mode cards. ModesSection handles the modal state. */}
       <section className="relative z-[2] md:flex-[6] px-5 sm:px-10 pb-6 md:pb-10 min-h-0">
-        <ModesSection todaySnapshot={snapshot} todayTag={tag} />
+        <ModesSection
+          todaySnapshot={snapshot}
+          todayTag={tag}
+          serverDailyCompleted={serverDailyCompleted}
+        />
       </section>
     </main>
   );

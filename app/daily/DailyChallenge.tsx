@@ -78,20 +78,45 @@ const LEADERBOARD_POLL_MS = 30_000;
 export default function DailyChallenge({
   picks,
   snapshotDate,
+  alreadyPlayed = false,
+  existingScore = null,
+  existingName = null,
 }: {
   picks: ArtistPick[];
   snapshotDate: string;
+  alreadyPlayed?: boolean;
+  existingScore?: number | null;
+  existingName?: string | null;
 }) {
   const [hydrated, setHydrated] = useState(false);
-  const [completed, setCompleted] = useState<Completed | null>(null);
+  // If the server told us this logged-in user has already submitted a row
+  // for today (on this device or another), seed the completed state so the
+  // client renders the results screen directly — no replay, no duplicate
+  // submission.
+  const [completed, setCompleted] = useState<Completed | null>(() => {
+    if (alreadyPlayed && existingScore !== null) {
+      return {
+        date: snapshotDate,
+        rounds: [], // round-level detail isn't stored in daily_scores
+        total: existingScore,
+        submittedAs: existingName,
+      };
+    }
+    return null;
+  });
   const [currentIdx, setCurrentIdx] = useState(0);
   const [rounds, setRounds] = useState<Round[]>([]);
   const [input, setInput] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // On mount: check localStorage for today's completion.
+  // On mount: check localStorage for today's completion (logged-out fallback).
+  // Skip if the server already gave us a completion for this user.
   useEffect(() => {
+    if (alreadyPlayed) {
+      setHydrated(true);
+      return;
+    }
     try {
       const raw = localStorage.getItem(storageKey(snapshotDate));
       if (raw) {
@@ -104,7 +129,7 @@ export default function DailyChallenge({
       // malformed — ignore, user gets a fresh game
     }
     setHydrated(true);
-  }, [snapshotDate]);
+  }, [snapshotDate, alreadyPlayed]);
 
   function submitGuess() {
     setInputError(null);
@@ -514,7 +539,9 @@ function Results({
           <div className="flex items-center justify-between mb-8">
             <div className="font-mono text-[11px] tracking-[3px] uppercase text-spotify flex items-center gap-[10px]">
               <span className="w-6 h-px bg-spotify" />
-              Daily Result
+              {completed.rounds.length === 0
+                ? "Already played today"
+                : "Daily Result"}
             </div>
             <span className="font-mono text-[10px] tracking-[2px] uppercase text-muted">
               {snapshotDate}
@@ -523,7 +550,9 @@ function Results({
 
           <div className="text-center">
             <div className="font-mono text-[11px] tracking-[3px] uppercase text-muted mb-3">
-              Total — lower is better
+              {completed.rounds.length === 0
+                ? "You've already played today's challenge"
+                : "Total — lower is better"}
             </div>
             <div
               className="font-display leading-none text-spotify"

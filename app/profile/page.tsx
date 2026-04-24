@@ -22,7 +22,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { addDays, getTodayLondon } from "@/lib/dates";
-import SoloBest from "./SoloBest";
 import SignOutButton from "./SignOutButton";
 
 export const dynamic = "force-dynamic";
@@ -147,6 +146,17 @@ export default async function ProfilePage() {
     .eq("user_id", user.id)
     .order("snapshot_date", { ascending: false })
     .order("created_at", { ascending: false });
+
+  // Cross-device solo best — source of truth for logged-in users is the
+  // profiles table, not localStorage.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("solo_best_score")
+    .eq("id", user.id)
+    .maybeSingle();
+  const soloBest: number | null =
+    (profile as { solo_best_score: number | null } | null)
+      ?.solo_best_score ?? null;
 
   const rows = dedupeByDate((rawRows ?? []) as ScoreRow[]);
   const streaks = computeStreaks(rows, getTodayLondon());
@@ -278,9 +288,32 @@ export default async function ProfilePage() {
             ================================================== */}
         <SectionHeading title="SOLO PLAY" className="mt-14" />
 
-        <SoloBest />
+        <SoloBestCard value={soloBest} />
       </div>
     </main>
+  );
+}
+
+// Server-rendered, since the profile page already knows the value from the
+// DB. Mirrors the visual shape of the SoloBest client component on the
+// homepage — but doesn't touch localStorage: cross-device truth lives in
+// profiles.solo_best_score.
+function SoloBestCard({ value }: { value: number | null }) {
+  return (
+    <div className="bg-surface border border-border rounded-lg p-6 flex flex-col">
+      <div className="font-mono text-[11px] tracking-[3px] uppercase text-muted mb-3">
+        Personal best
+      </div>
+      <div
+        className="font-display leading-none text-spotify tabular-nums"
+        style={{ fontSize: "clamp(56px, 9vw, 88px)" }}
+      >
+        {value !== null ? value.toLocaleString() : "—"}
+      </div>
+      <div className="mt-auto pt-3 font-mono text-[10px] tracking-[2px] uppercase text-muted">
+        Highest score across 5 rounds
+      </div>
+    </div>
   );
 }
 

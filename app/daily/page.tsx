@@ -43,6 +43,7 @@
 
 import Link from "next/link";
 import { supabase, type ArtistRow } from "@/lib/supabase";
+import { createServerSupabase } from "@/lib/supabase-server";
 import { getTodayLondon } from "@/lib/dates";
 import DailyChallenge, { type ArtistPick } from "./DailyChallenge";
 
@@ -225,8 +226,41 @@ export default async function DailyPage() {
     image_hash: p.image_hash,
   }));
 
+  // Cross-device replay gate: if the player is logged in and has already
+  // submitted a row for today's snapshot on any device, mark them as done
+  // so the client skips straight to the results screen. Logged-out users
+  // rely on the existing localStorage check in DailyChallenge.
+  let alreadyPlayed = false;
+  let existingScore: number | null = null;
+  let existingName: string | null = null;
+  const authSupabase = await createServerSupabase();
+  const {
+    data: { user },
+  } = await authSupabase.auth.getUser();
+  if (user) {
+    const { data: existing } = await authSupabase
+      .from("daily_scores")
+      .select("score, player_name")
+      .eq("user_id", user.id)
+      .eq("snapshot_date", snapshotDate)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      alreadyPlayed = true;
+      existingScore = (existing as { score: number }).score;
+      existingName = (existing as { player_name: string | null }).player_name;
+    }
+  }
+
   return (
-    <DailyChallenge picks={clientPicks} snapshotDate={snapshotDate} />
+    <DailyChallenge
+      picks={clientPicks}
+      snapshotDate={snapshotDate}
+      alreadyPlayed={alreadyPlayed}
+      existingScore={existingScore}
+      existingName={existingName}
+    />
   );
 }
 

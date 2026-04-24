@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, createBrowserSupabase } from "@/lib/supabase";
 import { getTodayLondon, msUntilLondonMidnight } from "@/lib/dates";
 
 type ModalAction = { label: string; href: string };
@@ -60,13 +60,20 @@ const MODES: Mode[] = [
 export default function ModesSection({
   todaySnapshot,
   todayTag,
+  serverDailyCompleted = false,
 }: {
   todaySnapshot: string;
   todayTag: string;
+  serverDailyCompleted?: boolean;
 }) {
   const [openIdx, setOpenIdx] = useState<number | null>(null);
   const [dailyScore, setDailyScore] = useState<number | null>(null);
   const openMode = openIdx !== null ? MODES[openIdx] : null;
+
+  // Truthy whenever the server confirmed a daily submission for this user
+  // OR localStorage has a score from playing on this device. Either signal
+  // is enough to flip the card to "Completed ✓".
+  const dailyCompleted = serverDailyCompleted || dailyScore !== null;
 
   // After mount, check whether the player has completed today's daily. The
   // literal spec asks for a flat `daily-challenge-score` key; we also fall
@@ -109,6 +116,7 @@ export default function ModesSection({
               mode={mode}
               tag={tagFor(mode, todayTag)}
               dailyScore={dailyScore}
+              dailyCompleted={dailyCompleted}
               onOpen={() => setOpenIdx(i)}
             />
           ))}
@@ -142,14 +150,16 @@ function ModeCard({
   mode,
   tag,
   dailyScore,
+  dailyCompleted,
   onOpen,
 }: {
   mode: Mode;
   tag: string;
   dailyScore: number | null;
+  dailyCompleted: boolean;
   onOpen: () => void;
 }) {
-  const completed = mode.id === "daily" && dailyScore !== null;
+  const completed = mode.id === "daily" && dailyCompleted;
   const cta = completed ? "Completed ✓" : "Play →";
 
   // The daily card gets an animated pulse ring (heartbeat) to hint at its
@@ -208,20 +218,49 @@ function ModeCard({
 // ------------------------------------------------------------
 
 function SoloVisual() {
-  // Reads the personal best from localStorage *after* mount — initial
-  // render shows "—" so SSR and first client paint agree, then flips to
-  // the stored score if present.
+  // Source of truth: profiles.solo_best_score for signed-in users
+  // (cross-device), localStorage for anonymous visitors. Initial state is
+  // null so SSR shows "—" and hydration stays stable; the effect below
+  // fills it in on the client.
   const [best, setBest] = useState<number | null>(null);
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("solo-best-score");
-      if (raw !== null) {
-        const n = Number(raw);
-        if (Number.isFinite(n) && n >= 0) setBest(n);
+    let cancelled = false;
+    (async () => {
+      const supa = createBrowserSupabase();
+      const {
+        data: { user },
+      } = await supa.auth.getUser();
+      if (user) {
+        const { data } = await supa
+          .from("profiles")
+          .select("solo_best_score")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (cancelled) return;
+        const serverBest =
+          data && typeof (data as { solo_best_score: number | null }).solo_best_score === "number"
+            ? (data as { solo_best_score: number }).solo_best_score
+            : null;
+        if (serverBest !== null) {
+          setBest(serverBest);
+          return;
+        }
+        // Signed-in but no server record yet — fall through to localStorage
+        // as a last resort so their first few local games aren't blank.
       }
-    } catch {
-      // localStorage disabled — leave as null
-    }
+      try {
+        const raw = localStorage.getItem("solo-best-score");
+        if (raw !== null) {
+          const n = Number(raw);
+          if (Number.isFinite(n) && n >= 0 && !cancelled) setBest(n);
+        }
+      } catch {
+        // localStorage disabled — leave as null
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -257,6 +296,24 @@ function DailyVisual({
           style={{ fontSize: "clamp(48px, 8vh, 96px)" }}
         >
           {score}
+        </div>
+      </div>
+    );
+  }
+  if (completed) {
+    // Server confirmed completion (cross-device), but we don't know the
+    // score from this device's localStorage — render a completed indicator
+    // instead of the countdown or a score.
+    return (
+      <div className="text-center">
+        <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mb-1">
+          Completed
+        </div>
+        <div
+          className="font-display leading-none text-spotify"
+          style={{ fontSize: "clamp(48px, 8vh, 96px)" }}
+        >
+          ✓
         </div>
       </div>
     );
