@@ -5,6 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase, createBrowserSupabase } from "@/lib/supabase";
 import { getTodayLondon } from "@/lib/dates";
 import { trackEvent } from "@/lib/tracking";
+import {
+  cacheLeaderboardName,
+  prefillName,
+} from "@/app/_components/LeaderboardSubmitForm";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
 
 export type ArtistPick = {
@@ -388,17 +392,25 @@ function Results({
   const [leaderboardErr, setLeaderboardErr] = useState<string | null>(null);
   const [playerRank, setPlayerRank] = useState<number | null>(null);
   const [totalPlayers, setTotalPlayers] = useState<number | null>(null);
-  const [name, setName] = useState("");
+  // Seed the submit input from localStorage immediately. The email-based
+  // refinement runs async after mount; if the user already has a cached
+  // "leaderboard-name" it wins over their email.
+  const [name, setName] = useState<string>(() => prefillName(null));
   const [userId, setUserId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
+  // Hides the submit form after the user explicitly skipped. Completion
+  // state lives in localStorage so they can reopen the page and still see
+  // their score — they just won't be on the leaderboard.
+  const [skippedSubmit, setSkippedSubmit] = useState(false);
 
   const submittedAs = completed.submittedAs;
   const playerScore = completed.total;
 
-  // Pre-fill the leaderboard name from the logged-in user's profile if they
-  // have one, and capture their user_id so the submit can attribute the
-  // score to them. Anonymous players get a blank input and null user_id.
+  // Refine the submit pre-fill with the logged-in user's email and
+  // capture their user_id for attribution. If "leaderboard-name" is
+  // already in localStorage (which prefillName read on mount) we leave
+  // the input alone; otherwise fall back to email local-part.
   useEffect(() => {
     if (submittedAs) return;
     let cancelled = false;
@@ -406,11 +418,10 @@ function Results({
     authClient.auth.getUser().then(({ data: { user } }) => {
       if (cancelled || !user) return;
       setUserId(user.id);
-      const local = user.email?.split("@")[0];
-      const meta = user.user_metadata ?? {};
-      const source = local ?? meta.full_name ?? meta.name ?? "";
-      const prefill = String(source).trim().slice(0, 20);
-      if (prefill) setName((prev) => (prev ? prev : prefill));
+      setName((prev) => {
+        if (prev && prev.trim().length > 0) return prev;
+        return prefillName(user.email ?? null);
+      });
     });
     return () => {
       cancelled = true;
@@ -561,6 +572,7 @@ function Results({
       setSubmitErr(error.message);
       return;
     }
+    cacheLeaderboardName(clean);
     onSubmitted(clean);
     fetchLeaderboard();
   }
@@ -643,33 +655,49 @@ function Results({
                 </div>
               )}
             </div>
-          ) : (
+          ) : skippedSubmit ? null : (
             <form
               onSubmit={submit}
-              className="bg-surface border border-border rounded-lg p-5 mb-5 flex flex-col sm:flex-row gap-3 sm:items-center"
+              className="bg-surface border border-border rounded-lg p-5 mb-5"
             >
-              <label
-                htmlFor="lb-name"
-                className="font-mono text-[11px] tracking-[2px] uppercase text-muted sm:shrink-0"
-              >
-                Your name
-              </label>
-              <input
-                id="lb-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={20}
-                placeholder="optional"
-                className="focus-green flex-1 rounded-[4px] bg-background border border-border px-3 py-2 text-foreground placeholder:text-muted/60 transition"
-              />
-              <button
-                type="submit"
-                disabled={submitting}
-                className="bg-spotify text-background font-bold text-[13px] tracking-[0.5px] px-5 py-2.5 rounded-[4px] transition hover:-translate-y-px hover:bg-spotify-bright disabled:opacity-50 disabled:translate-y-0"
-              >
-                {submitting ? "Submitting…" : "Submit score"}
-              </button>
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                <label
+                  htmlFor="lb-name"
+                  className="font-mono text-[11px] tracking-[2px] uppercase text-muted sm:shrink-0"
+                >
+                  Your name
+                </label>
+                <input
+                  id="lb-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={20}
+                  placeholder="Your name"
+                  aria-label="Display name"
+                  className="focus-green flex-1 rounded-[4px] bg-background border border-border px-3 py-2 text-foreground placeholder:text-muted/60 transition"
+                />
+                <button
+                  type="submit"
+                  disabled={submitting || name.trim().length === 0}
+                  className="bg-spotify text-background font-bold text-[13px] tracking-[0.5px] px-5 py-2.5 rounded-[4px] transition hover:-translate-y-px hover:bg-spotify-bright disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                >
+                  {submitting ? "Submitting…" : "Submit score"}
+                </button>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-4">
+                <span className="font-mono text-[10px] tracking-[2px] uppercase text-muted">
+                  Max 20 characters · Your score is saved either way
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSkippedSubmit(true)}
+                  disabled={submitting}
+                  className="font-mono text-[10px] tracking-[2px] uppercase text-muted hover:text-foreground transition disabled:opacity-50"
+                >
+                  Skip
+                </button>
+              </div>
             </form>
           )}
           {submitErr && (

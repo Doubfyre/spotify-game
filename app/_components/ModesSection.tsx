@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { supabase, createBrowserSupabase } from "@/lib/supabase";
 import { getTodayLondon, msUntilLondonMidnight } from "@/lib/dates";
+import HomeCardLeaderboard, {
+  type HomeLeaderboardVariant,
+} from "./HomeCardLeaderboard";
 
 type ModalAction = { label: string; href: string };
 
@@ -204,56 +207,87 @@ function ModeCard({
   const completed = mode.id === "daily" && dailyCompleted;
   const cta = completed ? "Completed ✓" : "Play →";
 
+  // Collapsible mini-leaderboard. Party mode has no scores table, so it
+  // opts out of the toggle entirely.
+  const leaderboardVariant: HomeLeaderboardVariant | null =
+    mode.id === "solo"
+      ? "solo"
+      : mode.id === "daily"
+        ? "daily"
+        : mode.id === "higherlower"
+          ? "higherlower"
+          : null;
+  const [lbOpen, setLbOpen] = useState(false);
+
   // The daily card gets an animated pulse ring (heartbeat) to hint at its
   // time-sensitive nature. Paused on hover via CSS (see globals.css).
   const pulseClass =
     mode.id === "daily" && !completed ? "animate-card-pulse" : "";
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label={`Open how-to-play for ${mode.name}`}
-      className={`group relative bg-surface border border-border rounded-lg p-3 sm:p-7 text-left transition-colors duration-200 hover:border-spotify cursor-pointer overflow-hidden flex flex-col min-h-0 md:h-full ${pulseClass}`}
+    <div
+      className={`group relative bg-surface border border-border rounded-lg transition-colors duration-200 hover:border-spotify overflow-hidden flex flex-col min-h-0 md:h-full ${pulseClass}`}
     >
-      {/* Top: tag */}
-      <div className="font-mono text-[9px] sm:text-[11px] tracking-[1.5px] sm:tracking-[2px] uppercase text-spotify leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
-        {tag}
-      </div>
-
-      {/* Upper-middle: title + description (description hidden on mobile
-          to keep the card compact — title + tag carry the meaning) */}
-      <div className="mt-2 sm:mt-4">
-        <h3
-          className="font-display tracking-[1.5px] sm:tracking-[2px] text-foreground leading-none"
-          style={{ fontSize: "clamp(18px, 3.4vw, 40px)" }}
-        >
-          {mode.name}
-        </h3>
-        <p className="hidden sm:block mt-2 text-[13px] sm:text-[14px] text-muted leading-[1.5]">
-          {mode.shortDesc}
-        </p>
-      </div>
-
-      {/* Lower-middle: visual element — fills remaining space and scales on hover */}
-      <div className="flex-1 flex items-center justify-center min-h-0 py-1 sm:py-4">
-        <div className="transition-transform duration-200 group-hover:scale-105">
-          {mode.id === "solo" && <SoloVisual />}
-          {mode.id === "daily" && (
-            <DailyVisual score={dailyScore} completed={completed} />
-          )}
-          {mode.id === "party" && <PartyVisual />}
-          {mode.id === "higherlower" && <HigherLowerVisual />}
-        </div>
-      </div>
-
-      {/* Bottom: Play button */}
-      <div
-        className={`font-mono text-[10px] sm:text-[12px] tracking-[1.5px] sm:tracking-[2px] uppercase ${completed ? "text-muted" : "text-spotify"}`}
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Open how-to-play for ${mode.name}`}
+        className="flex-1 flex flex-col p-3 sm:p-7 text-left cursor-pointer min-h-0"
       >
-        {cta}
-      </div>
-    </button>
+        {/* Top: tag */}
+        <div className="font-mono text-[9px] sm:text-[11px] tracking-[1.5px] sm:tracking-[2px] uppercase text-spotify leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
+          {tag}
+        </div>
+
+        {/* Upper-middle: title + description (description hidden on mobile
+            to keep the card compact — title + tag carry the meaning) */}
+        <div className="mt-2 sm:mt-4">
+          <h3
+            className="font-display tracking-[1.5px] sm:tracking-[2px] text-foreground leading-none"
+            style={{ fontSize: "clamp(18px, 3.4vw, 40px)" }}
+          >
+            {mode.name}
+          </h3>
+          <p className="hidden sm:block mt-2 text-[13px] sm:text-[14px] text-muted leading-[1.5]">
+            {mode.shortDesc}
+          </p>
+        </div>
+
+        {/* Lower-middle: visual element — fills remaining space and scales on hover */}
+        <div className="flex-1 flex items-center justify-center min-h-0 py-1 sm:py-4">
+          <div className="transition-transform duration-200 group-hover:scale-105">
+            {mode.id === "solo" && <SoloVisual />}
+            {mode.id === "daily" && (
+              <DailyVisual score={dailyScore} completed={completed} />
+            )}
+            {mode.id === "party" && <PartyVisual />}
+            {mode.id === "higherlower" && <HigherLowerVisual />}
+          </div>
+        </div>
+
+        {/* Bottom: Play button */}
+        <div
+          className={`font-mono text-[10px] sm:text-[12px] tracking-[1.5px] sm:tracking-[2px] uppercase ${completed ? "text-muted" : "text-spotify"}`}
+        >
+          {cta}
+        </div>
+      </button>
+
+      {leaderboardVariant && (
+        <div className="border-t border-border/60 px-3 sm:px-7 py-2 sm:py-3">
+          <button
+            type="button"
+            onClick={() => setLbOpen((v) => !v)}
+            aria-expanded={lbOpen}
+            aria-label={`${lbOpen ? "Hide" : "Show"} ${mode.name} leaderboard`}
+            className="font-mono text-[9px] sm:text-[10px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted hover:text-foreground transition"
+          >
+            Leaderboard {lbOpen ? "−" : "+"}
+          </button>
+          <HomeCardLeaderboard variant={leaderboardVariant} isOpen={lbOpen} />
+        </div>
+      )}
+    </div>
   );
 }
 

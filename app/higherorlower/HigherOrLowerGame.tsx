@@ -6,6 +6,9 @@ import { createBrowserSupabase } from "@/lib/supabase";
 import { trackEvent } from "@/lib/tracking";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
 import HighScoreLeaderboard from "@/app/_components/HighScoreLeaderboard";
+import LeaderboardSubmitForm, {
+  prefillName,
+} from "@/app/_components/LeaderboardSubmitForm";
 import {
   buildPairs,
   shuffle,
@@ -17,23 +20,6 @@ export type { HLArtist } from "@/lib/higherorlower";
 
 function formatListeners(n: number): string {
   return n.toLocaleString();
-}
-
-// Mirrors the helper in SoloGame.tsx — keep them in sync if you change
-// either. Prefers email local-part, falls back to cached party guest
-// name, then "Guest". Clamped to 20 chars for the DB check.
-function derivePlayerName(email: string | null | undefined): string {
-  if (email) {
-    const local = email.split("@")[0];
-    if (local && local.length > 0) return local.slice(0, 20);
-  }
-  try {
-    const cached = localStorage.getItem("party-display-name");
-    if (cached && cached.trim().length > 0) return cached.trim().slice(0, 20);
-  } catch {
-    // localStorage disabled — fall through
-  }
-  return "Guest";
 }
 
 type Phase = "play" | "reveal" | "over";
@@ -58,10 +44,6 @@ export default function HigherOrLowerGame({
   const [phase, setPhase] = useState<Phase>("play");
   const [lastGuess, setLastGuess] = useState<Side | null>(null);
   const [correctSide, setCorrectSide] = useState<Side | null>(null);
-  // Display name the current run was submitted under (null until the
-  // higher_lower_scores insert succeeds). Drives "your row" highlight in
-  // the leaderboard on the game-over screen.
-  const [submittedAs, setSubmittedAs] = useState<string | null>(null);
 
   useEffect(() => {
     setPairs(buildPairs(shuffle(artists)));
@@ -70,7 +52,6 @@ export default function HigherOrLowerGame({
     setPhase("play");
     setLastGuess(null);
     setCorrectSide(null);
-    setSubmittedAs(null);
     // Fires on initial mount AND each Play Again (gameId bump).
     void trackEvent("hol_start");
   }, [artists, gameId]);
@@ -192,23 +173,8 @@ export default function HigherOrLowerGame({
         } = await supa.auth.getUser();
         if (!user) return;
 
-        const playerName = derivePlayerName(user.email ?? null);
-
-        // Public leaderboard row — one per completed run (history). RLS
-        // allows anon+auth inserts, so this works for both regular users
-        // and party-guest anonymous sessions.
-        const { error: lbErr } = await supa
-          .from("higher_lower_scores")
-          .insert({
-            user_id: user.id,
-            player_name: playerName,
-            streak: final,
-          });
-        if (lbErr) {
-          console.error("[hol] higher_lower_scores insert failed", lbErr);
-        } else {
-          setSubmittedAs(playerName);
-        }
+        // Leaderboard insert is gated on the player typing a name and
+        // clicking Submit in GameOver — we no longer auto-post on end.
 
         // Ensure a profile row exists. Idempotent — if the row already
         // exists, ignoreDuplicates makes this a no-op.
@@ -262,7 +228,6 @@ export default function HigherOrLowerGame({
         correctSide={correctSide}
         left={left}
         right={right}
-        submittedAs={submittedAs}
         onPlayAgain={() => setGameId((g) => g + 1)}
       />
     );
@@ -414,7 +379,6 @@ function GameOver({
   correctSide,
   left,
   right,
-  submittedAs,
   onPlayAgain,
 }: {
   streak: number;
@@ -423,11 +387,52 @@ function GameOver({
   correctSide: Side | null;
   left: HLArtist | undefined;
   right: HLArtist | undefined;
-  submittedAs: string | null;
   onPlayAgain: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  // Leaderboard submit state lives here so GameOver is self-contained;
+  // it unmounts on Play Again and remounts on the next game-over.
+  const [submitStatus, setSubmitStatus] = useState<
+    "pending" | "submitted" | "skipped"
+  >("pending");
+  const [submittedAs, setSubmittedAs] = useState<string | null>(null);
+  const [initialName, setInitialName] = useState<string>("");
   const isNewBest = streak > 0 && streak >= best;
+
+  // Pre-fill the submit form on mount. Streak 0 runs don't get a
+  // leaderboard form at all (see the render below).
+  useEffect(() => {
+    setInitialName(prefillName(null));
+    (async () => {
+      try {
+        const supa = createBrowserSupabase();
+        const {
+          data: { user },
+        } = await supa.auth.getUser();
+        if (user?.email) setInitialName(prefillName(user.email));
+      } catch {
+        // fall through — leaderboard-name from localStorage or empty.
+      }
+    })();
+  }, []);
+
+  async function submitLeaderboard(name: string) {
+    const supa = createBrowserSupabase();
+    const {
+      data: { user },
+    } = await supa.auth.getUser();
+    const { error } = await supa.from("higher_lower_scores").insert({
+      user_id: user?.id ?? null,
+      player_name: name,
+      streak,
+    });
+    if (error) {
+      console.error("[hol] higher_lower_scores insert failed", error);
+      throw new Error(error.message);
+    }
+    setSubmittedAs(name);
+    setSubmitStatus("submitted");
+  }
   // Only show the final pairing reveal if the game actually ended on a
   // wrong guess (i.e. we know which side was correct). Ending from deck
   // exhaustion is unreachable in practice but guarded anyway.
@@ -521,14 +526,23 @@ function GameOver({
           </div>
         </div>
 
-        <HighScoreLeaderboard
-          table="higher_lower_scores"
-          metricColumn="streak"
-          metricLabel="Streak"
-          player={
-            submittedAs !== null ? { name: submittedAs, metric: streak } : null
-          }
-        />
+        {streak > 0 && submitStatus === "pending" ? (
+          <LeaderboardSubmitForm
+            initialName={initialName}
+            metricLabel="streak"
+            onSubmit={submitLeaderboard}
+            onSkip={() => setSubmitStatus("skipped")}
+          />
+        ) : (
+          <HighScoreLeaderboard
+            table="higher_lower_scores"
+            metricColumn="streak"
+            metricLabel="Streak"
+            player={
+              submittedAs !== null ? { name: submittedAs, metric: streak } : null
+            }
+          />
+        )}
       </div>
     </main>
   );
