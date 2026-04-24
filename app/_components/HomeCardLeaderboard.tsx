@@ -216,8 +216,10 @@ export default function HomeCardLeaderboard({
         ref={panelRef}
         className="relative w-full sm:max-w-[480px] bg-surface sm:border sm:border-border sm:rounded-lg max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto animate-modal-scale-in"
       >
-        {/* Sticky close row — pinned while the list scrolls. */}
-        <div className="sticky top-0 z-10 flex justify-end px-3 sm:px-4 pt-3 pb-1 bg-surface/85 backdrop-blur-sm">
+        {/* Sticky close row — pinned while the list scrolls. Bottom
+            padding matches the content's top padding so there's clean
+            separation from the eyebrow label, no overlap. */}
+        <div className="sticky top-0 z-10 flex justify-end px-3 sm:px-4 pt-3 pb-3 bg-surface/85 backdrop-blur-sm">
           <button
             ref={closeBtnRef}
             type="button"
@@ -229,14 +231,19 @@ export default function HomeCardLeaderboard({
           </button>
         </div>
 
-        <div className="px-6 sm:px-8 pb-8 sm:pb-10 -mt-2">
+        {/* Content block: no negative top margin (the previous -mt-2 was
+            dragging the eyebrow behind the sticky close row's translucent
+            background). pt-2 gives headroom for Bebas Neue ascenders on
+            the title below, which sit slightly above the line-box under
+            leading-[0.95]. */}
+        <div className="px-6 sm:px-8 pt-2 pb-8 sm:pb-10">
           <div className="font-mono text-[11px] tracking-[3px] uppercase text-spotify mb-4 flex items-center gap-[10px]">
             <span className="w-6 h-px bg-spotify" />
             Leaderboard
           </div>
           <h2
             id={titleId}
-            className="font-display tracking-[2px] leading-[0.95] text-spotify mb-8"
+            className="font-display tracking-[2px] leading-[0.95] text-spotify mb-8 pt-1"
             style={{ fontSize: "clamp(28px, 6vw, 40px)" }}
           >
             {modeName.toUpperCase()}
