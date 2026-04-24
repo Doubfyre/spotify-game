@@ -24,6 +24,40 @@ function shuffle<T>(input: T[]): T[] {
   return arr;
 }
 
+// Minimum rank gap enforced between the two artists shown in a single
+// round. Prevents pairs like rank 320 vs rank 321 where the listener
+// counts are near-identical and the guess collapses to a coin flip.
+const MIN_RANK_GAP = 50;
+
+type Pair = readonly [HLArtist, HLArtist];
+
+// Greedy pairing over a shuffled list. For each still-unpaired artist
+// (walking the shuffle order), find the next unpaired artist whose rank
+// is ≥ MIN_RANK_GAP away; mark both used; move on. If no valid partner
+// exists for the current artist, stop — the remaining artists aren't
+// playable as a pair and the run ends there.
+function buildPairs(shuffled: HLArtist[]): Pair[] {
+  const used = new Array<boolean>(shuffled.length).fill(false);
+  const pairs: Pair[] = [];
+  for (let i = 0; i < shuffled.length; i++) {
+    if (used[i]) continue;
+    const a = shuffled[i];
+    let partnerIdx = -1;
+    for (let j = i + 1; j < shuffled.length; j++) {
+      if (used[j]) continue;
+      if (Math.abs(a.rank - shuffled[j].rank) >= MIN_RANK_GAP) {
+        partnerIdx = j;
+        break;
+      }
+    }
+    if (partnerIdx === -1) break;
+    used[i] = true;
+    used[partnerIdx] = true;
+    pairs.push([a, shuffled[partnerIdx]] as const);
+  }
+  return pairs;
+}
+
 function formatListeners(n: number): string {
   return n.toLocaleString();
 }
@@ -38,13 +72,13 @@ export default function HigherOrLowerGame({
   artists: HLArtist[];
   snapshotDate: string;
 }) {
-  // The deck is shuffled once per mount. "Play again" bumps gameId which
-  // forces a reshuffle (see effect below). Using an effect to populate the
-  // deck avoids SSR/client hydration mismatch that would come from calling
-  // Math.random() during the first render.
+  // Pairs are built once per mount. "Play again" bumps gameId, which
+  // triggers a reshuffle + repair (see effect below). Populating via
+  // effect avoids SSR/client hydration mismatch that would come from
+  // calling Math.random() during the first render.
   const [gameId, setGameId] = useState(0);
-  const [deck, setDeck] = useState<HLArtist[]>([]);
-  const [cursor, setCursor] = useState(1); // index of the "next" card to reveal
+  const [pairs, setPairs] = useState<Pair[]>([]);
+  const [pairIdx, setPairIdx] = useState(0);
   const [streak, setStreak] = useState(0);
   const [best, setBest] = useState(0);
   const [phase, setPhase] = useState<Phase>("play");
@@ -52,8 +86,8 @@ export default function HigherOrLowerGame({
   const [correctSide, setCorrectSide] = useState<Side | null>(null);
 
   useEffect(() => {
-    setDeck(shuffle(artists));
-    setCursor(1);
+    setPairs(buildPairs(shuffle(artists)));
+    setPairIdx(0);
     setStreak(0);
     setPhase("play");
     setLastGuess(null);
@@ -106,14 +140,16 @@ export default function HigherOrLowerGame({
     };
   }, []);
 
-  const left = deck[cursor - 1];
-  const right = deck[cursor];
-  const deckExhausted = deck.length > 0 && cursor >= deck.length;
+  const currentPair = pairs[pairIdx];
+  const left = currentPair?.[0];
+  const right = currentPair?.[1];
+  const pairsExhausted = pairs.length > 0 && pairIdx >= pairs.length;
 
   function guess(side: Side) {
     if (phase !== "play" || !left || !right) return;
-    // Ties: give it to the player (both sides count as correct). This
-    // keeps the game playable even when two artists are near-identical.
+    // Ties: give it to the player (both sides count as correct). The
+    // ≥50-rank pairing rule makes actual ties effectively impossible,
+    // but keep the fallback so a freak data match doesn't brick the run.
     const leftIsHigher = left.monthly_listeners >= right.monthly_listeners;
     const rightIsHigher = right.monthly_listeners >= left.monthly_listeners;
     const correct =
@@ -132,11 +168,12 @@ export default function HigherOrLowerGame({
     window.setTimeout(() => {
       if (correct) {
         setStreak((s) => s + 1);
-        // If we've just revealed the last pairing, end the game on a win.
-        if (cursor + 1 >= deck.length) {
+        // If we've just finished the last available pairing, end the
+        // game on a win. Otherwise advance to the next pair.
+        if (pairIdx + 1 >= pairs.length) {
           setPhase("over");
         } else {
-          setCursor((c) => c + 1);
+          setPairIdx((i) => i + 1);
           setPhase("play");
           setLastGuess(null);
           setCorrectSide(null);
@@ -229,7 +266,7 @@ export default function HigherOrLowerGame({
     );
   }
 
-  if (deckExhausted || !left || !right) {
+  if (pairsExhausted || !left || !right) {
     // Shouldn't happen in practice (we end the game on the last correct
     // guess), but render a safe state just in case.
     return (
