@@ -110,26 +110,31 @@ export default function DailyChallenge({
   const [inputError, setInputError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // On mount: check localStorage for today's completion (logged-out fallback).
-  // Skip if the server already gave us a completion for this user.
+  // On mount: always try localStorage first. If the user played on this
+  // device, localStorage has the full round-by-round detail (diffs per
+  // guess) — richer than what daily_scores stores. That data is what the
+  // share card needs. The server-seeded initial state (alreadyPlayed with
+  // rounds: []) stays as a fallback for genuine cross-device cases where
+  // localStorage has nothing.
   useEffect(() => {
-    if (alreadyPlayed) {
-      setHydrated(true);
-      return;
-    }
     try {
       const raw = localStorage.getItem(storageKey(snapshotDate));
       if (raw) {
         const parsed = JSON.parse(raw) as Completed;
-        if (parsed && parsed.date === snapshotDate) {
+        if (
+          parsed &&
+          parsed.date === snapshotDate &&
+          Array.isArray(parsed.rounds) &&
+          parsed.rounds.length > 0
+        ) {
           setCompleted(parsed);
         }
       }
     } catch {
-      // malformed — ignore, user gets a fresh game
+      // malformed — ignore, user keeps whatever initial state we seeded
     }
     setHydrated(true);
-  }, [snapshotDate, alreadyPlayed]);
+  }, [snapshotDate]);
 
   function submitGuess() {
     setInputError(null);
