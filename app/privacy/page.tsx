@@ -90,9 +90,9 @@ export default function PrivacyPage() {
                 <strong className="text-foreground">Vercel</strong> — hosting.
               </li>
               <li>
-                <strong className="text-foreground">music.eduardlupu.com</strong>{" "}
-                — Spotify top 500 ranking data, fetched once a day by our
-                scraper.
+                <strong className="text-foreground">Spotify ranking data</strong>{" "}
+                — fetched daily from a public data source. No user data is
+                involved in this process.
               </li>
             </ul>
           </Section>
@@ -109,6 +109,18 @@ export default function PrivacyPage() {
               </a>
               . We&rsquo;ll remove your email, all rows in our tables that
               reference you, and confirm when it&rsquo;s done.
+            </p>
+            <p>
+              Under UK GDPR you have the right to access, correct, or erase
+              your personal data at any time.
+            </p>
+          </Section>
+
+          <Section title="Data retention">
+            <p>
+              We keep your data for as long as your account is active. If
+              you delete your account, all associated data is removed within
+              30 days.
             </p>
           </Section>
 
