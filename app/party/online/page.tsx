@@ -115,6 +115,68 @@
 // REQUIRED: enable Anonymous Sign-In in the Supabase dashboard under
 // Authentication → Providers → Anonymous. Without it, signInAnonymously
 // returns an error and the client shows a fallback prompting full sign-in.
+//
+// ---------------------------------------------------------------------
+// Anonymous-user cleanup. Every guest creates an auth.users row; without
+// this pg_cron job they accumulate forever. Schedules a weekly sweep
+// that deletes anon users with no activity in 30 days. Party tables +
+// profiles cascade-delete with the user; daily_scores rows are
+// detached (user_id → NULL) so leaderboard history survives.
+//
+// REQUIRED: enable the pg_cron extension in the Supabase dashboard under
+// Database → Extensions → pg_cron. Run this block in the SQL editor
+// (re-runnable — unschedule then reschedule):
+//
+//   create extension if not exists pg_cron;
+//
+//   create or replace function public.cleanup_stale_anonymous_users()
+//   returns int
+//   language plpgsql
+//   security definer
+//   as $$
+//   declare
+//     deleted_count int;
+//   begin
+//     -- Preserve daily_scores history for leaderboards by detaching
+//     -- rather than cascading. party_rooms/party_players/profiles all
+//     -- use on delete cascade and clean themselves up.
+//     update public.daily_scores
+//     set user_id = null
+//     where user_id in (
+//       select id from auth.users
+//       where is_anonymous = true
+//         and coalesce(last_sign_in_at, created_at) < now() - interval '30 days'
+//     );
+//
+//     delete from auth.users
+//     where is_anonymous = true
+//       and coalesce(last_sign_in_at, created_at) < now() - interval '30 days';
+//
+//     get diagnostics deleted_count = row_count;
+//     return deleted_count;
+//   end;
+//   $$;
+//
+//   -- Unschedule any prior version so this block is idempotent. The
+//   -- SELECT returns 0 rows if the job doesn't exist yet — no error.
+//   select cron.unschedule(jobid)
+//   from cron.job
+//   where jobname = 'cleanup-stale-anonymous-users';
+//
+//   -- Weekly, Sunday 03:00 UTC (low traffic).
+//   select cron.schedule(
+//     'cleanup-stale-anonymous-users',
+//     '0 3 * * 0',
+//     $$ select public.cleanup_stale_anonymous_users(); $$
+//   );
+//
+//   -- Sanity check: confirm the job is registered.
+//   select jobname, schedule, active from cron.job
+//   where jobname = 'cleanup-stale-anonymous-users';
+//
+// Any future table that references auth.users(id) must pick a deletion
+// behaviour (CASCADE, SET NULL, or be added to the detach step above).
+// Otherwise this job will fail with a FK violation in the pg_cron log.
 
 import { createServerSupabase } from "@/lib/supabase-server";
 import { supabase as dbReadOnly } from "@/lib/supabase";
