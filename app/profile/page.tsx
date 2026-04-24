@@ -147,16 +147,19 @@ export default async function ProfilePage() {
     .order("snapshot_date", { ascending: false })
     .order("created_at", { ascending: false });
 
-  // Cross-device solo best — source of truth for logged-in users is the
+  // Cross-device bests — source of truth for logged-in users is the
   // profiles table, not localStorage.
   const { data: profile } = await supabase
     .from("profiles")
-    .select("solo_best_score")
+    .select("solo_best_score, higher_lower_best_streak")
     .eq("id", user.id)
     .maybeSingle();
   const soloBest: number | null =
     (profile as { solo_best_score: number | null } | null)
       ?.solo_best_score ?? null;
+  const higherLowerBest: number | null =
+    (profile as { higher_lower_best_streak: number | null } | null)
+      ?.higher_lower_best_streak ?? null;
 
   const rows = dedupeByDate((rawRows ?? []) as ScoreRow[]);
   const streaks = computeStreaks(rows, getTodayLondon());
@@ -289,6 +292,13 @@ export default async function ProfilePage() {
         <SectionHeading title="SOLO PLAY" className="mt-14" />
 
         <SoloBestCard value={soloBest} />
+
+        {/* ==================================================
+            HIGHER OR LOWER
+            ================================================== */}
+        <SectionHeading title="HIGHER OR LOWER" className="mt-14" />
+
+        <HigherLowerBestCard value={higherLowerBest} />
       </div>
     </main>
   );
@@ -312,6 +322,32 @@ function SoloBestCard({ value }: { value: number | null }) {
       </div>
       <div className="mt-auto pt-3 font-mono text-[10px] tracking-[2px] uppercase text-muted">
         Highest score across 5 rounds
+      </div>
+    </div>
+  );
+}
+
+// Server-rendered best streak for Higher or Lower, same shape as
+// SoloBestCard. Source of truth is profiles.higher_lower_best_streak.
+function HigherLowerBestCard({ value }: { value: number | null }) {
+  return (
+    <div className="bg-surface border border-border rounded-lg p-6 flex flex-col">
+      <div className="font-mono text-[11px] tracking-[3px] uppercase text-muted mb-3">
+        Best streak
+      </div>
+      <div className="flex items-baseline gap-3">
+        <span className="text-3xl sm:text-4xl leading-none" aria-hidden>
+          🔥
+        </span>
+        <span
+          className="font-display leading-none text-spotify tabular-nums"
+          style={{ fontSize: "clamp(56px, 9vw, 88px)" }}
+        >
+          {value !== null ? value.toLocaleString() : "—"}
+        </span>
+      </div>
+      <div className="mt-auto pt-3 font-mono text-[10px] tracking-[2px] uppercase text-muted">
+        Consecutive correct answers
       </div>
     </div>
   );

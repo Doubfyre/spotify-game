@@ -9,7 +9,7 @@ import { getTodayLondon, msUntilLondonMidnight } from "@/lib/dates";
 type ModalAction = { label: string; href: string };
 
 type Mode = {
-  id: "solo" | "daily" | "party";
+  id: "solo" | "daily" | "party" | "higherlower";
   name: string;
   shortDesc: string;
   modal: {
@@ -54,6 +54,17 @@ const MODES: Mode[] = [
         { label: "Pass & Play", href: "/party/passplay" },
         { label: "Play Online", href: "/party/online" },
       ],
+    },
+  },
+  {
+    id: "higherlower",
+    name: "Higher or Lower",
+    shortDesc: "Two artists. Pick who has more monthly listeners.",
+    modal: {
+      title: "HOW TO PLAY — HIGHER OR LOWER",
+      rules:
+        "Two artists are shown side by side. Tap the one you think has more monthly listeners on Spotify. Correct answer = streak goes up, next pair. Wrong = game over. No time limit. How long can your streak run?",
+      actions: [{ label: "Play Higher or Lower", href: "/higherorlower" }],
     },
   },
 ];
@@ -111,7 +122,7 @@ export default function ModesSection({
   return (
     <>
       <div className="h-full flex flex-col gap-4">
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 min-h-0">
+        <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 min-h-0">
           {MODES.map((mode, i) => (
             <ModeCard
               key={mode.id}
@@ -158,6 +169,8 @@ function tagFor(mode: Mode, todayTag: string): string {
       return `TODAY'S CHALLENGE · ${todayTag}`;
     case "party":
       return "2–8 PLAYERS";
+    case "higherlower":
+      return "UNLIMITED PLAYS";
   }
 }
 
@@ -219,6 +232,7 @@ function ModeCard({
             <DailyVisual score={dailyScore} completed={completed} />
           )}
           {mode.id === "party" && <PartyVisual />}
+          {mode.id === "higherlower" && <HigherLowerVisual />}
         </div>
       </div>
 
@@ -286,6 +300,67 @@ function SoloVisual() {
     <div className="text-center">
       <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mb-1">
         Your best score
+      </div>
+      <div
+        className="font-display leading-none text-spotify tabular-nums"
+        style={{ fontSize: "clamp(48px, 8vh, 96px)" }}
+      >
+        {best !== null ? best.toLocaleString() : "—"}
+      </div>
+    </div>
+  );
+}
+
+function HigherLowerVisual() {
+  // Same server/localStorage hybrid as SoloVisual: signed-in users see
+  // their profiles.higher_lower_best_streak; anon visitors fall back to
+  // localStorage. Initial null keeps SSR/hydration stable.
+  const [best, setBest] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const supa = createBrowserSupabase();
+      const {
+        data: { user },
+      } = await supa.auth.getUser();
+      if (user) {
+        const { data } = await supa
+          .from("profiles")
+          .select("higher_lower_best_streak")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (cancelled) return;
+        const serverBest =
+          data &&
+          typeof (data as { higher_lower_best_streak: number | null })
+            .higher_lower_best_streak === "number"
+            ? (data as { higher_lower_best_streak: number })
+                .higher_lower_best_streak
+            : null;
+        if (serverBest !== null) {
+          setBest(serverBest);
+          return;
+        }
+      }
+      try {
+        const raw = localStorage.getItem("higher-lower-best-streak");
+        if (raw !== null) {
+          const n = Number(raw);
+          if (Number.isFinite(n) && n >= 0 && !cancelled) setBest(n);
+        }
+      } catch {
+        // localStorage disabled — leave as null
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div className="text-center">
+      <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mb-1">
+        Best streak
       </div>
       <div
         className="font-display leading-none text-spotify tabular-nums"

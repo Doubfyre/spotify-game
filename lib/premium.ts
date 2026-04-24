@@ -10,15 +10,17 @@
 //   -- so we store per-user app metadata in a public.profiles table with
 //   -- a 1:1 link to auth.users(id).
 //   CREATE TABLE public.profiles (
-//     id               uuid primary key references auth.users(id) on delete cascade,
-//     is_premium       boolean not null default false,
-//     premium_since    timestamptz,
-//     solo_best_score  int,
-//     created_at       timestamptz not null default now()
+//     id                         uuid primary key references auth.users(id) on delete cascade,
+//     is_premium                 boolean not null default false,
+//     premium_since              timestamptz,
+//     solo_best_score            int,
+//     higher_lower_best_streak   int,
+//     created_at                 timestamptz not null default now()
 //   );
 //
-//   -- If profiles already exists from an earlier migration, add the column:
+//   -- If profiles already exists from an earlier migration, add the columns:
 //   ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS solo_best_score int;
+//   ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS higher_lower_best_streak int;
 //
 //   ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 //   CREATE POLICY "users read own profile"
