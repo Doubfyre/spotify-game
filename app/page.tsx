@@ -115,30 +115,30 @@ export default async function Home() {
       </div>
 
       {/* TOP ~40%: title + subtitle */}
-      <section className="relative z-[2] md:flex-[4] flex items-center px-5 sm:px-10 py-6 md:py-0">
+      <section className="relative z-[2] md:flex-[4] flex items-center px-5 sm:px-10 py-3 md:py-0">
         <div className="w-full max-w-4xl">
-          <div className="flex items-center gap-[10px] mb-5">
+          <div className="flex items-center gap-[10px] mb-3 sm:mb-5">
             <span className="w-8 h-px bg-spotify" />
-            <span className="font-mono text-[11px] tracking-[3px] uppercase text-spotify font-medium">
+            <span className="font-mono text-[10px] sm:text-[11px] tracking-[2px] sm:tracking-[3px] uppercase text-spotify font-medium">
               The Spotify Ranking Game
             </span>
           </div>
           <h1
-            className="font-display leading-[0.95] tracking-[2px] text-foreground mb-4"
-            style={{ fontSize: "clamp(48px, 10vw, 128px)" }}
+            className="font-display leading-[0.95] tracking-[2px] text-foreground mb-2 sm:mb-4"
+            style={{ fontSize: "clamp(40px, 10vw, 128px)" }}
           >
             THE SPOTIFY
             <br />
             <span className="text-spotify">GAME</span>
           </h1>
-          <p className="font-light text-muted text-base sm:text-lg max-w-xl">
+          <p className="font-light text-muted text-sm sm:text-lg max-w-xl">
             Guess which artists are hiding in Spotify&rsquo;s top 500.
           </p>
         </div>
       </section>
 
       {/* BOTTOM ~60%: mode cards. ModesSection handles the modal state. */}
-      <section className="relative z-[2] md:flex-[6] px-5 sm:px-10 pb-6 md:pb-10 min-h-0">
+      <section className="relative z-[2] md:flex-[6] px-5 sm:px-10 pb-3 sm:pb-6 md:pb-10 min-h-0">
         <ModesSection
           todaySnapshot={snapshot}
           todayTag={tag}

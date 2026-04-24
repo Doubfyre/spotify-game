@@ -121,8 +121,8 @@ export default function ModesSection({
 
   return (
     <>
-      <div className="h-full flex flex-col gap-4">
-        <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 min-h-0">
+      <div className="h-full flex flex-col gap-2 sm:gap-4">
+        <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 min-h-0">
           {MODES.map((mode, i) => (
             <ModeCard
               key={mode.id}
@@ -204,28 +204,29 @@ function ModeCard({
       type="button"
       onClick={onOpen}
       aria-label={`Open how-to-play for ${mode.name}`}
-      className={`group relative bg-surface border border-border rounded-lg p-5 sm:p-7 text-left transition-colors duration-200 hover:border-spotify cursor-pointer overflow-hidden flex flex-col min-h-[240px] md:min-h-0 md:h-full ${pulseClass}`}
+      className={`group relative bg-surface border border-border rounded-lg p-3 sm:p-7 text-left transition-colors duration-200 hover:border-spotify cursor-pointer overflow-hidden flex flex-col min-h-0 md:h-full ${pulseClass}`}
     >
       {/* Top: tag */}
-      <div className="font-mono text-[11px] tracking-[2px] uppercase text-spotify">
+      <div className="font-mono text-[9px] sm:text-[11px] tracking-[1.5px] sm:tracking-[2px] uppercase text-spotify leading-tight">
         {tag}
       </div>
 
-      {/* Upper-middle: title + description */}
-      <div className="mt-3 sm:mt-4">
+      {/* Upper-middle: title + description (description hidden on mobile
+          to keep the card compact — title + tag carry the meaning) */}
+      <div className="mt-2 sm:mt-4">
         <h3
-          className="font-display tracking-[2px] text-foreground leading-none"
-          style={{ fontSize: "clamp(24px, 3.4vw, 40px)" }}
+          className="font-display tracking-[1.5px] sm:tracking-[2px] text-foreground leading-none"
+          style={{ fontSize: "clamp(18px, 3.4vw, 40px)" }}
         >
           {mode.name}
         </h3>
-        <p className="mt-2 text-[13px] sm:text-[14px] text-muted leading-[1.5]">
+        <p className="hidden sm:block mt-2 text-[13px] sm:text-[14px] text-muted leading-[1.5]">
           {mode.shortDesc}
         </p>
       </div>
 
       {/* Lower-middle: visual element — fills remaining space and scales on hover */}
-      <div className="flex-1 flex items-center justify-center min-h-0 py-3 sm:py-4">
+      <div className="flex-1 flex items-center justify-center min-h-0 py-1 sm:py-4">
         <div className="transition-transform duration-200 group-hover:scale-105">
           {mode.id === "solo" && <SoloVisual />}
           {mode.id === "daily" && (
@@ -238,7 +239,7 @@ function ModeCard({
 
       {/* Bottom: Play button */}
       <div
-        className={`font-mono text-[12px] tracking-[2px] uppercase ${completed ? "text-muted" : "text-spotify"}`}
+        className={`font-mono text-[10px] sm:text-[12px] tracking-[1.5px] sm:tracking-[2px] uppercase ${completed ? "text-muted" : "text-spotify"}`}
       >
         {cta}
       </div>
@@ -298,12 +299,12 @@ function SoloVisual() {
 
   return (
     <div className="text-center">
-      <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mb-1">
+      <div className="font-mono text-[9px] sm:text-[10px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted mb-0.5 sm:mb-1">
         Your best score
       </div>
       <div
         className="font-display leading-none text-spotify tabular-nums"
-        style={{ fontSize: "clamp(48px, 8vh, 96px)" }}
+        style={{ fontSize: "clamp(28px, 5vh, 96px)" }}
       >
         {best !== null ? best.toLocaleString() : "—"}
       </div>
@@ -359,12 +360,12 @@ function HigherLowerVisual() {
 
   return (
     <div className="text-center">
-      <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mb-1">
+      <div className="font-mono text-[9px] sm:text-[10px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted mb-0.5 sm:mb-1">
         Best streak
       </div>
       <div
         className="font-display leading-none text-spotify tabular-nums"
-        style={{ fontSize: "clamp(48px, 8vh, 96px)" }}
+        style={{ fontSize: "clamp(28px, 5vh, 96px)" }}
       >
         {best !== null ? best.toLocaleString() : "—"}
       </div>
@@ -382,12 +383,12 @@ function DailyVisual({
   if (completed && score !== null) {
     return (
       <div className="text-center">
-        <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mb-1">
+        <div className="font-mono text-[9px] sm:text-[10px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted mb-0.5 sm:mb-1">
           Your score today
         </div>
         <div
           className="font-display leading-none text-spotify tabular-nums"
-          style={{ fontSize: "clamp(48px, 8vh, 96px)" }}
+          style={{ fontSize: "clamp(28px, 5vh, 96px)" }}
         >
           {score}
         </div>
@@ -400,12 +401,12 @@ function DailyVisual({
     // instead of the countdown or a score.
     return (
       <div className="text-center">
-        <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mb-1">
+        <div className="font-mono text-[9px] sm:text-[10px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted mb-0.5 sm:mb-1">
           Completed
         </div>
         <div
           className="font-display leading-none text-spotify"
-          style={{ fontSize: "clamp(48px, 8vh, 96px)" }}
+          style={{ fontSize: "clamp(28px, 5vh, 96px)" }}
         >
           ✓
         </div>
@@ -435,12 +436,12 @@ function CountdownDisplay() {
 
   return (
     <div className="text-center">
-      <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mb-2">
+      <div className="font-mono text-[9px] sm:text-[10px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted mb-1 sm:mb-2">
         Resets in
       </div>
       <div
-        className="font-mono font-medium text-spotify tabular-nums tracking-[2px] leading-none"
-        style={{ fontSize: "clamp(22px, 3.6vh, 40px)" }}
+        className="font-mono font-medium text-spotify tabular-nums tracking-[1.5px] sm:tracking-[2px] leading-none"
+        style={{ fontSize: "clamp(14px, 2.8vh, 40px)" }}
       >
         {display}
       </div>
@@ -451,30 +452,30 @@ function CountdownDisplay() {
 function PartyVisual() {
   return (
     <div className="text-center">
-      <div className="flex items-center justify-center gap-2">
+      <div className="flex items-center justify-center gap-1 sm:gap-2">
         <span
-          className="w-8 h-8 rounded-full border border-background"
+          className="w-5 h-5 sm:w-8 sm:h-8 rounded-full border border-background"
           style={{ background: "var(--color-spotify)" }}
           aria-hidden
         />
         <span
-          className="w-8 h-8 rounded-full border border-background"
+          className="w-5 h-5 sm:w-8 sm:h-8 rounded-full border border-background"
           style={{ background: "var(--color-amber)" }}
           aria-hidden
         />
         <span
-          className="w-8 h-8 rounded-full border border-background"
+          className="w-5 h-5 sm:w-8 sm:h-8 rounded-full border border-background"
           style={{ background: "#3b82f6" }}
           aria-hidden
         />
         <span
-          className="w-8 h-8 rounded-full border border-dashed border-muted flex items-center justify-center text-muted text-sm leading-none"
+          className="w-5 h-5 sm:w-8 sm:h-8 rounded-full border border-dashed border-muted flex items-center justify-center text-muted text-[10px] sm:text-sm leading-none"
           aria-hidden
         >
           +
         </span>
       </div>
-      <div className="mt-3 font-mono text-[10px] tracking-[2px] uppercase text-muted">
+      <div className="mt-1 sm:mt-3 font-mono text-[9px] sm:text-[10px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted">
         Pass &amp; Play or Online
       </div>
     </div>
