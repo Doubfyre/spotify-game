@@ -1,3 +1,19 @@
+// Solo Play leaderboard schema. Run in the Supabase SQL editor:
+//
+//   create table public.solo_scores (
+//     id uuid primary key default gen_random_uuid(),
+//     user_id uuid references auth.users(id),
+//     player_name text not null check (char_length(player_name) between 1 and 20),
+//     score int not null check (score >= 0),
+//     created_at timestamptz not null default now()
+//   );
+//   create index solo_scores_score_idx on public.solo_scores (score desc);
+//   create index solo_scores_created_idx on public.solo_scores (created_at desc);
+//   grant select, insert on public.solo_scores to anon, authenticated;
+//   alter table public.solo_scores enable row level security;
+//   create policy "public read" on public.solo_scores for select using (true);
+//   create policy "public insert" on public.solo_scores for insert with check (true);
+
 import Link from "next/link";
 import { supabase, type ArtistRow } from "@/lib/supabase";
 import { getTodayLondon } from "@/lib/dates";

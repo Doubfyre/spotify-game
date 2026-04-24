@@ -1,6 +1,6 @@
 // Higher or Lower — two artists side-by-side, pick the one with more
 // monthly listeners. Streak-based scoring with a per-user best saved to
-// profiles.higher_lower_best_streak.
+// profiles.higher_lower_best_streak and a public leaderboard table.
 //
 // Required Supabase migration:
 //
@@ -9,6 +9,22 @@
 // The column is nullable on purpose — null means "no best yet", which lets
 // the atomic conditional UPDATE (see HigherOrLowerGame.tsx) match rows
 // that have never recorded a streak without a separate insert path.
+//
+// Public leaderboard table. Run in the Supabase SQL editor:
+//
+//   create table public.higher_lower_scores (
+//     id uuid primary key default gen_random_uuid(),
+//     user_id uuid references auth.users(id),
+//     player_name text not null check (char_length(player_name) between 1 and 20),
+//     streak int not null check (streak >= 0),
+//     created_at timestamptz not null default now()
+//   );
+//   create index higher_lower_scores_streak_idx on public.higher_lower_scores (streak desc);
+//   create index higher_lower_scores_created_idx on public.higher_lower_scores (created_at desc);
+//   grant select, insert on public.higher_lower_scores to anon, authenticated;
+//   alter table public.higher_lower_scores enable row level security;
+//   create policy "public read" on public.higher_lower_scores for select using (true);
+//   create policy "public insert" on public.higher_lower_scores for insert with check (true);
 
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";

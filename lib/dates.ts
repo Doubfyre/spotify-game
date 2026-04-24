@@ -45,6 +45,41 @@ export function getTomorrowLondon(): string {
 }
 
 /**
+ * Returns an ISO UTC timestamp for 00:00 London time on the given
+ * YYYY-MM-DD. Used to filter leaderboard queries by "today" while
+ * respecting the London rollover (so the TODAY tab matches the rest of
+ * the app's daily-reset semantics). London is UTC+0 (GMT, winter) or
+ * UTC+1 (BST, summer) — we probe both candidates and pick the one that
+ * actually formats to midnight in London.
+ */
+export function londonDayStartUTC(dateIso: string): string {
+  const [y, m, d] = dateIso.split("-").map(Number);
+  for (const offsetHours of [0, -1]) {
+    const candidate = new Date(Date.UTC(y, m - 1, d, offsetHours, 0, 0));
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/London",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(candidate);
+    const ly = parts.find((p) => p.type === "year")?.value ?? "";
+    const lm = parts.find((p) => p.type === "month")?.value ?? "";
+    const ld = parts.find((p) => p.type === "day")?.value ?? "";
+    const lh = parts.find((p) => p.type === "hour")?.value ?? "";
+    const lmin = parts.find((p) => p.type === "minute")?.value ?? "";
+    if (`${ly}-${lm}-${ld}` === dateIso && lh === "00" && lmin === "00") {
+      return candidate.toISOString();
+    }
+  }
+  // DST transition edge case — fall back to UTC midnight of the date.
+  // Off by an hour on the two switchover days; fine for a TODAY cutoff.
+  return new Date(Date.UTC(y, m - 1, d)).toISOString();
+}
+
+/**
  * Milliseconds until the next Europe/London midnight. Feeds the homepage
  * countdown.
  *

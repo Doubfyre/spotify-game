@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
+import HighScoreLeaderboard from "@/app/_components/HighScoreLeaderboard";
 import {
   buildPairs,
   shuffle,
@@ -15,6 +16,23 @@ export type { HLArtist } from "@/lib/higherorlower";
 
 function formatListeners(n: number): string {
   return n.toLocaleString();
+}
+
+// Mirrors the helper in SoloGame.tsx — keep them in sync if you change
+// either. Prefers email local-part, falls back to cached party guest
+// name, then "Guest". Clamped to 20 chars for the DB check.
+function derivePlayerName(email: string | null | undefined): string {
+  if (email) {
+    const local = email.split("@")[0];
+    if (local && local.length > 0) return local.slice(0, 20);
+  }
+  try {
+    const cached = localStorage.getItem("party-display-name");
+    if (cached && cached.trim().length > 0) return cached.trim().slice(0, 20);
+  } catch {
+    // localStorage disabled — fall through
+  }
+  return "Guest";
 }
 
 type Phase = "play" | "reveal" | "over";
@@ -39,6 +57,10 @@ export default function HigherOrLowerGame({
   const [phase, setPhase] = useState<Phase>("play");
   const [lastGuess, setLastGuess] = useState<Side | null>(null);
   const [correctSide, setCorrectSide] = useState<Side | null>(null);
+  // Display name the current run was submitted under (null until the
+  // higher_lower_scores insert succeeds). Drives "your row" highlight in
+  // the leaderboard on the game-over screen.
+  const [submittedAs, setSubmittedAs] = useState<string | null>(null);
 
   useEffect(() => {
     setPairs(buildPairs(shuffle(artists)));
@@ -47,6 +69,7 @@ export default function HigherOrLowerGame({
     setPhase("play");
     setLastGuess(null);
     setCorrectSide(null);
+    setSubmittedAs(null);
   }, [artists, gameId]);
 
   // Load the player's best streak on mount. Server record wins for signed-in
@@ -164,6 +187,25 @@ export default function HigherOrLowerGame({
           data: { user },
         } = await supa.auth.getUser();
         if (!user) return;
+
+        const playerName = derivePlayerName(user.email ?? null);
+
+        // Public leaderboard row — one per completed run (history). RLS
+        // allows anon+auth inserts, so this works for both regular users
+        // and party-guest anonymous sessions.
+        const { error: lbErr } = await supa
+          .from("higher_lower_scores")
+          .insert({
+            user_id: user.id,
+            player_name: playerName,
+            streak: final,
+          });
+        if (lbErr) {
+          console.error("[hol] higher_lower_scores insert failed", lbErr);
+        } else {
+          setSubmittedAs(playerName);
+        }
+
         // Ensure a profile row exists. Idempotent — if the row already
         // exists, ignoreDuplicates makes this a no-op.
         const { error: upsertErr } = await supa
@@ -216,6 +258,7 @@ export default function HigherOrLowerGame({
         correctSide={correctSide}
         left={left}
         right={right}
+        submittedAs={submittedAs}
         onPlayAgain={() => setGameId((g) => g + 1)}
       />
     );
@@ -367,6 +410,7 @@ function GameOver({
   correctSide,
   left,
   right,
+  submittedAs,
   onPlayAgain,
 }: {
   streak: number;
@@ -375,6 +419,7 @@ function GameOver({
   correctSide: Side | null;
   left: HLArtist | undefined;
   right: HLArtist | undefined;
+  submittedAs: string | null;
   onPlayAgain: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -471,6 +516,15 @@ function GameOver({
             </Link>
           </div>
         </div>
+
+        <HighScoreLeaderboard
+          table="higher_lower_scores"
+          metricColumn="streak"
+          metricLabel="Streak"
+          player={
+            submittedAs !== null ? { name: submittedAs, metric: streak } : null
+          }
+        />
       </div>
     </main>
   );

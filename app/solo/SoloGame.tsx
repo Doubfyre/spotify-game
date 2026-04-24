@@ -5,6 +5,25 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserSupabase, type ArtistRow } from "@/lib/supabase";
 import { fuzzyFind } from "@/lib/fuzzy";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
+import HighScoreLeaderboard from "@/app/_components/HighScoreLeaderboard";
+
+// Display name used when inserting into the public leaderboard tables.
+// Prefers the signed-in user's email local-part; falls back to the party
+// guest name they cached on this device, then "Guest". Clamped to the
+// 20-char DB check.
+function derivePlayerName(email: string | null | undefined): string {
+  if (email) {
+    const local = email.split("@")[0];
+    if (local && local.length > 0) return local.slice(0, 20);
+  }
+  try {
+    const cached = localStorage.getItem("party-display-name");
+    if (cached && cached.trim().length > 0) return cached.trim().slice(0, 20);
+  } catch {
+    // localStorage disabled — fall through
+  }
+  return "Guest";
+}
 
 const TOTAL_ROUNDS = 5;
 // Perfect game = the five highest-scoring picks, i.e. ranks 500, 499, 498,
@@ -268,16 +287,21 @@ function Results({
   onReset: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  // The display name the current player submitted under, if the
+  // public-leaderboard insert succeeded. Powers the "your row" highlight
+  // in the leaderboard. Null for users who didn't get saved (no session,
+  // insert errored, etc.).
+  const [submittedAs, setSubmittedAs] = useState<string | null>(null);
   const percent = Math.round((total / MAX_POSSIBLE) * 100);
 
-  // Save personal best. Results mounts once per completed game; if the user
-  // clicks "Play again" this component unmounts and remounts on the next
-  // game's end, so this effect fires exactly when we want it to.
+  // Save personal best + submit to the public solo_scores leaderboard.
+  // Results mounts once per completed game; if the user clicks "Play
+  // again" this component unmounts and remounts on the next game's end,
+  // so this effect fires exactly when we want it to.
   //
   // localStorage write is unconditional (benefits anon users + acts as a
-  // cache for signed-in users). Server write uses an atomic conditional
-  // UPDATE — Postgres only writes if the new total beats the existing
-  // solo_best_score (or it's null), so no read-before-write race.
+  // cache for signed-in users). Profile-row write uses a read-then-write
+  // guarded by the current best so we only ever raise the record.
   useEffect(() => {
     try {
       const raw = localStorage.getItem("solo-best-score");
@@ -295,6 +319,25 @@ function Results({
           data: { user },
         } = await supa.auth.getUser();
         if (!user) return;
+
+        const playerName = derivePlayerName(user.email ?? null);
+
+        // Public leaderboard row — one per completed game (history), not
+        // a best-only dedupe. RLS on solo_scores permits anon+auth
+        // inserts, so this works for both regular and anonymous users.
+        const { error: lbErr } = await supa
+          .from("solo_scores")
+          .insert({
+            user_id: user.id,
+            player_name: playerName,
+            score: total,
+          });
+        if (lbErr) {
+          console.error("[solo] solo_scores insert failed", lbErr);
+        } else {
+          setSubmittedAs(playerName);
+        }
+
         // Ensure a profile row exists. Idempotent — if the row already
         // exists, ignoreDuplicates makes this a no-op and leaves existing
         // stats untouched.
@@ -305,11 +348,8 @@ function Results({
           console.error("[solo] profiles upsert failed", upsertErr);
           return;
         }
-        // Read-then-write. Previously used an atomic `.update().or(...)`
-        // conditional filter, but it was failing silently — either from
-        // the combined filter URL mis-parsing or from PostgREST returning
-        // `{ error }` (which our try/catch never caught). Two requests is
-        // fine here: this only runs once at the end of a game, per user.
+        // Read-then-write best score. We only ever want to raise the
+        // record, so read first, compare, then write if strictly better.
         const { data: prof, error: readErr } = await supa
           .from("profiles")
           .select("solo_best_score")
@@ -407,6 +447,13 @@ function Results({
             </Link>
           </div>
         </div>
+
+        <HighScoreLeaderboard
+          table="solo_scores"
+          metricColumn="score"
+          metricLabel="Score"
+          player={submittedAs !== null ? { name: submittedAs, metric: total } : null}
+        />
       </div>
     </main>
   );
