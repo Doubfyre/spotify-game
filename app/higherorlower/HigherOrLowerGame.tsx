@@ -426,12 +426,10 @@ function GameOver({
     } = await supa.auth.getUser();
 
     if (user?.id) {
-      // Logged-in: one leaderboard row per user_id. Read existing best
-      // first — if the new streak isn't strictly better, keep the old
-      // row (player keeps their record + original display name).
-      //
-      // Requires the partial unique index documented at the top of
-      // app/higherorlower/page.tsx. Without it, upsert errors out.
+      // Logged-in: dedupe on user_id via select-then-update-or-insert.
+      // PostgREST upsert with onConflict can't target a partial unique
+      // index (WHERE user_id IS NOT NULL), so we drive the dedupe from
+      // the client.
       const { data: existing, error: readErr } = await supa
         .from("higher_lower_scores")
         .select("player_name, streak")
@@ -444,20 +442,30 @@ function GameOver({
       const existingRow = existing as
         | { player_name: string; streak: number }
         | null;
-      const existingStreak = existingRow?.streak ?? null;
-      if (existingStreak !== null && existingStreak >= streak) {
-        setSubmittedAs(existingRow!.player_name);
-        setSubmittedMetric(existingStreak);
-        setSubmitStatus("submitted");
-        return;
-      }
-      const { error } = await supa.from("higher_lower_scores").upsert(
-        { user_id: user.id, player_name: name, streak },
-        { onConflict: "user_id" },
-      );
-      if (error) {
-        console.error("[hol] higher_lower_scores upsert failed", error);
-        throw new Error(error.message);
+
+      if (existingRow) {
+        if (existingRow.streak >= streak) {
+          setSubmittedAs(existingRow.player_name);
+          setSubmittedMetric(existingRow.streak);
+          setSubmitStatus("submitted");
+          return;
+        }
+        const { error: updateErr } = await supa
+          .from("higher_lower_scores")
+          .update({ player_name: name, streak })
+          .eq("user_id", user.id);
+        if (updateErr) {
+          console.error("[hol] higher_lower_scores update failed", updateErr);
+          throw new Error(updateErr.message);
+        }
+      } else {
+        const { error: insertErr } = await supa
+          .from("higher_lower_scores")
+          .insert({ user_id: user.id, player_name: name, streak });
+        if (insertErr) {
+          console.error("[hol] higher_lower_scores insert failed", insertErr);
+          throw new Error(insertErr.message);
+        }
       }
       setSubmittedAs(name);
       setSubmittedMetric(streak);

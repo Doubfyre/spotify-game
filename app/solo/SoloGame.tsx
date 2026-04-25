@@ -372,12 +372,11 @@ function Results({
     } = await supa.auth.getUser();
 
     if (user?.id) {
-      // Logged in: dedupe on user_id. Read existing best first — if the
-      // new score isn't strictly better, we leave the stored row alone
-      // (player keeps their record + original display name).
-      //
-      // Requires the partial unique index documented at the top of
-      // app/solo/page.tsx. Without it, upsert with onConflict errors out.
+      // Logged-in: dedupe on user_id via select-then-update-or-insert.
+      // PostgREST upsert with onConflict can't target a partial unique
+      // index (WHERE user_id IS NOT NULL), so we drive the dedupe from
+      // the client. Race window between the read and the write is
+      // tiny in practice — one user, one browser, one click.
       const { data: existing, error: readErr } = await supa
         .from("solo_scores")
         .select("player_name, score")
@@ -390,22 +389,34 @@ function Results({
       const existingRow = existing as
         | { player_name: string; score: number }
         | null;
-      const existingScore = existingRow?.score ?? null;
-      if (existingScore !== null && existingScore >= total) {
-        // Their stored best is already at least this good — don't
-        // overwrite. Highlight the existing row in the leaderboard.
-        setSubmittedAs(existingRow!.player_name);
-        setSubmittedMetric(existingScore);
-        setSubmitStatus("submitted");
-        return;
-      }
-      const { error } = await supa.from("solo_scores").upsert(
-        { user_id: user.id, player_name: name, score: total },
-        { onConflict: "user_id" },
-      );
-      if (error) {
-        console.error("[solo] solo_scores upsert failed", error);
-        throw new Error(error.message);
+
+      if (existingRow) {
+        if (existingRow.score >= total) {
+          // Their stored best is already at least this good — don't
+          // overwrite. Highlight the existing row in the leaderboard.
+          setSubmittedAs(existingRow.player_name);
+          setSubmittedMetric(existingRow.score);
+          setSubmitStatus("submitted");
+          return;
+        }
+        const { error: updateErr } = await supa
+          .from("solo_scores")
+          .update({ player_name: name, score: total })
+          .eq("user_id", user.id);
+        if (updateErr) {
+          console.error("[solo] solo_scores update failed", updateErr);
+          throw new Error(updateErr.message);
+        }
+      } else {
+        const { error: insertErr } = await supa.from("solo_scores").insert({
+          user_id: user.id,
+          player_name: name,
+          score: total,
+        });
+        if (insertErr) {
+          console.error("[solo] solo_scores insert failed", insertErr);
+          throw new Error(insertErr.message);
+        }
       }
       setSubmittedAs(name);
       setSubmittedMetric(total);

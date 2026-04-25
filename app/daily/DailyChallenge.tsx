@@ -562,18 +562,17 @@ function Results({
     }
     setSubmitting(true);
 
-    // Logged-in users: dedupe on (user_id, snapshot_date). Daily is
-    // lower-is-better, so if a row already exists for this user today
-    // we only overwrite when the new score is strictly lower. The UI
-    // normally prevents replay, but this also catches double-click and
-    // same-account cross-device submissions.
-    //
-    // Requires the partial unique index in app/daily/page.tsx.
+    // Logged-in users: dedupe on (user_id, snapshot_date) via
+    // select-then-update-or-insert. Daily is lower-is-better, so if a
+    // row already exists for this user today we only overwrite when
+    // the new score is strictly lower. PostgREST upsert with
+    // onConflict can't target a partial unique index (WHERE user_id
+    // IS NOT NULL), so we drive the dedupe from the client.
     let error: { message: string } | null = null;
     if (userId) {
       const { data: existing, error: readErr } = await supabase
         .from("daily_scores")
-        .select("score")
+        .select("id, score")
         .eq("user_id", userId)
         .eq("snapshot_date", snapshotDate)
         .maybeSingle();
@@ -582,28 +581,37 @@ function Results({
         setSubmitErr(readErr.message);
         return;
       }
-      const existingScore =
-        (existing as { score?: number } | null)?.score ?? null;
-      if (existingScore !== null && existingScore <= completed.total) {
-        // They already have an equal-or-better score for today. Treat
-        // as a successful submission so the UI transitions, but don't
-        // downgrade the stored row.
-        setSubmitting(false);
-        cacheLeaderboardName(clean);
-        onSubmitted(clean);
-        fetchLeaderboard();
-        return;
-      }
-      const { error: upsertErr } = await supabase.from("daily_scores").upsert(
-        {
+      const existingRow = existing as
+        | { id: string; score: number }
+        | null;
+      if (existingRow) {
+        if (existingRow.score <= completed.total) {
+          // They already have an equal-or-better score for today.
+          // Treat as a successful submission so the UI transitions,
+          // but don't downgrade the stored row.
+          setSubmitting(false);
+          cacheLeaderboardName(clean);
+          onSubmitted(clean);
+          fetchLeaderboard();
+          return;
+        }
+        const { error: updateErr } = await supabase
+          .from("daily_scores")
+          .update({
+            player_name: clean,
+            score: completed.total,
+          })
+          .eq("id", existingRow.id);
+        error = updateErr;
+      } else {
+        const { error: insertErr } = await supabase.from("daily_scores").insert({
           snapshot_date: snapshotDate,
           player_name: clean,
           score: completed.total,
           user_id: userId,
-        },
-        { onConflict: "user_id,snapshot_date" },
-      );
-      error = upsertErr;
+        });
+        error = insertErr;
+      }
     } else {
       // Anonymous: no user_id to dedupe on. Plain insert.
       const { error: insertErr } = await supabase.from("daily_scores").insert({
