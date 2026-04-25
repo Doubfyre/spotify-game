@@ -193,6 +193,29 @@ body::before {
   animation: none;
 }
 
+/* Subtle opacity pulse used to nudge the eye toward the How to Play
+   button. Easing both ways so the dwell at min/max is short and the
+   motion stays gentle — no scale, no glow. */
+@keyframes gentle-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+.animate-gentle-pulse {
+  animation: gentle-pulse 2.4s ease-in-out infinite;
+}
+/* Stop the pulse while the user is interacting — once they've found the
+   button, the animation is just noise. */
+.animate-gentle-pulse:hover,
+.animate-gentle-pulse:focus-visible {
+  animation: none;
+  opacity: 1;
+}
+
 /* Reusable animation classes */
 .animate-pulse-dot {
   animation: pulse-dot 2s ease-in-out infinite;

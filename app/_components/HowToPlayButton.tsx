@@ -44,7 +44,7 @@ export default function HowToPlayButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="How to play"
-        className="border border-border text-foreground rounded-[4px] px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-[13px] font-medium tracking-[0.3px] hover:border-spotify hover:text-spotify transition inline-flex items-center gap-1.5 sm:gap-2 shrink-0 whitespace-nowrap"
+        className="animate-gentle-pulse border border-border text-foreground rounded-[4px] px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-[13px] font-medium tracking-[0.3px] hover:border-spotify hover:text-spotify transition inline-flex items-center gap-1.5 sm:gap-2 shrink-0 whitespace-nowrap"
       >
         <span aria-hidden className="font-mono leading-none">
           ?
