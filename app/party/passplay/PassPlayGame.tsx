@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArtistRow } from "@/lib/supabase";
 import { fuzzyFind } from "@/lib/fuzzy";
+import { trackEvent } from "@/lib/tracking";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
 
 type Player = {
@@ -83,6 +84,7 @@ export default function PassPlayGame({
     setUsedArtistIds(new Set());
     setLastPick(null);
     setStatus("countdown");
+    void trackEvent("passplay_start");
   }
 
   // Always consumes the turn: a miss (not in top 500) is recorded as a

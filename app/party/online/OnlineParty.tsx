@@ -38,6 +38,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createBrowserSupabase } from "@/lib/supabase";
 import type { ArtistRow } from "@/lib/supabase";
 import { fuzzyFind } from "@/lib/fuzzy";
+import { trackEvent } from "@/lib/tracking";
 
 // ============================================================
 // Types
@@ -262,6 +263,19 @@ function OnlinePartyInner({
       }
     };
   }, [code, supabase, reloadRoom, reloadPlayers, reloadPicks]);
+
+  // Fire one online_start per OnlineParty mount the first time we see
+  // this room transition into / arrive in the "active" state. Late-
+  // joiners (joined after the host pressed start) also get tracked
+  // because the trigger is "first observation of active", not the
+  // lobby→active edge.
+  const onlineStartFired = useRef(false);
+  useEffect(() => {
+    if (room?.status === "active" && !onlineStartFired.current) {
+      onlineStartFired.current = true;
+      void trackEvent("online_start");
+    }
+  }, [room?.status]);
 
   // Derived state
   const isHost = room !== null && room.host_id === userId;

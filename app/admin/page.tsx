@@ -124,6 +124,21 @@ export default async function AdminPage() {
       return count ?? 0;
     })();
 
+  // Same shape as countToday but no created_at filter — used for the
+  // all-time-plays-by-mode section.
+  const countAllTimeEvents = (eventType: string): Promise<number> =>
+    (async () => {
+      const { count, error } = await supa
+        .from("game_events")
+        .select("*", { count: "exact", head: true })
+        .eq("event_type", eventType);
+      if (error) {
+        console.error(`admin: count game_events (${eventType}) all-time —`, error);
+        return 0;
+      }
+      return count ?? 0;
+    })();
+
   // Parallel load. daily_scores reads go through the anon-role PostgREST
   // client (public read policy covers them); auth.users needs service role
   // via the admin endpoint. A failure in listAllUsers falls back to an
@@ -144,6 +159,11 @@ export default async function AdminPage() {
     holStarts,
     holCompletes,
     sessionIdsToday,
+    dailyAllTime,
+    soloAllTime,
+    holAllTime,
+    passplayAllTime,
+    onlineAllTime,
   ] = await Promise.all([
     supa
       .from("daily_scores")
@@ -185,6 +205,11 @@ export default async function AdminPage() {
       .from("game_events")
       .select("session_id")
       .gte("created_at", todayStartISO),
+    countAllTimeEvents("daily_start"),
+    countAllTimeEvents("solo_start"),
+    countAllTimeEvents("hol_start"),
+    countAllTimeEvents("passplay_start"),
+    countAllTimeEvents("online_start"),
   ]);
 
   const todayRows = (todayQ.data ?? []) as ScoreRow[];
@@ -316,6 +341,19 @@ export default async function AdminPage() {
             starts={holStarts}
             completes={holCompletes}
           />
+        </div>
+
+        {/* All time plays by mode — every game_events.<mode>_start row
+            ever recorded. Pass & Play and Online Party only count once
+            we deployed their tracking, so historical numbers will be
+            understated relative to the older modes. */}
+        <SectionHeading>All time plays by mode</SectionHeading>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+          <StatCard label="Daily Challenge" value={dailyAllTime} />
+          <StatCard label="Solo Play" value={soloAllTime} />
+          <StatCard label="Higher or Lower" value={holAllTime} />
+          <StatCard label="Pass & Play" value={passplayAllTime} />
+          <StatCard label="Online Party" value={onlineAllTime} />
         </div>
 
         {/* Weekly */}
