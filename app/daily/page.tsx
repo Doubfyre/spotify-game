@@ -252,26 +252,56 @@ export default async function DailyPage() {
   // submitted a row for today's snapshot on any device, mark them as done
   // so the client skips straight to the results screen. Logged-out users
   // rely on the existing localStorage check in DailyChallenge.
+  //
+  // The console.log lines below show in Vercel runtime logs and let us
+  // see exactly what user/date the gate ran with and whether the row was
+  // matched. Cheap to keep — only fires per server render of /daily.
   let alreadyPlayed = false;
   let existingScore: number | null = null;
   let existingName: string | null = null;
   const authSupabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await authSupabase.auth.getUser();
-  if (user) {
-    const { data: existing } = await authSupabase
+  const { data: authData, error: authErr } = await authSupabase.auth.getUser();
+  const user = authData?.user ?? null;
+  if (authErr) {
+    console.warn("[daily-gate] auth.getUser error —", authErr.message);
+  }
+  if (!user) {
+    console.log(
+      `[daily-gate] no signed-in user; falling back to localStorage gate (snapshotDate=${snapshotDate})`,
+    );
+  } else {
+    // Use .limit(1) + array read instead of .maybeSingle() so the gate
+    // is robust even if the partial unique index hasn't been created yet
+    // and there's more than one row for this (user, day) combo.
+    const { data: existingRows, error: gateErr } = await authSupabase
       .from("daily_scores")
       .select("score, player_name")
       .eq("user_id", user.id)
       .eq("snapshot_date", snapshotDate)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+
+    if (gateErr) {
+      console.error(
+        `[daily-gate] query failed for user_id=${user.id} snapshot=${snapshotDate} —`,
+        gateErr.message,
+      );
+    }
+    const existing = (existingRows ?? [])[0] as
+      | { score: number; player_name: string | null }
+      | undefined;
+
     if (existing) {
       alreadyPlayed = true;
-      existingScore = (existing as { score: number }).score;
-      existingName = (existing as { player_name: string | null }).player_name;
+      existingScore = existing.score;
+      existingName = existing.player_name;
+      console.log(
+        `[daily-gate] match user_id=${user.id} snapshot=${snapshotDate} score=${existing.score} → alreadyPlayed=true`,
+      );
+    } else {
+      console.log(
+        `[daily-gate] no row for user_id=${user.id} snapshot=${snapshotDate} → alreadyPlayed=false`,
+      );
     }
   }
 

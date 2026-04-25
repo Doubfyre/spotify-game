@@ -562,6 +562,24 @@ function Results({
     }
     setSubmitting(true);
 
+    // Re-fetch the auth user at submit time. Relying on `userId` state
+    // alone caused cross-device replays to slip through: if the
+    // initial useEffect hadn't resolved before the player typed three
+    // numbers, the row got user_id=null and the server-side gate on
+    // the next device couldn't find it. auth.getUser() is fast and
+    // authoritative, so we always read it here and use whichever id we
+    // can resolve (fresh fetch wins, stored state is the fallback).
+    let resolvedUserId: string | null = userId;
+    try {
+      const authClient = createBrowserSupabase();
+      const {
+        data: { user: liveUser },
+      } = await authClient.auth.getUser();
+      if (liveUser?.id) resolvedUserId = liveUser.id;
+    } catch {
+      // Network/auth blip — fall back to whatever userId state holds.
+    }
+
     // Logged-in users: dedupe on (user_id, snapshot_date) via
     // select-then-update-or-insert. Daily is lower-is-better, so if a
     // row already exists for this user today we only overwrite when
@@ -569,11 +587,11 @@ function Results({
     // onConflict can't target a partial unique index (WHERE user_id
     // IS NOT NULL), so we drive the dedupe from the client.
     let error: { message: string } | null = null;
-    if (userId) {
+    if (resolvedUserId) {
       const { data: existing, error: readErr } = await supabase
         .from("daily_scores")
         .select("id, score")
-        .eq("user_id", userId)
+        .eq("user_id", resolvedUserId)
         .eq("snapshot_date", snapshotDate)
         .maybeSingle();
       if (readErr) {
@@ -608,7 +626,7 @@ function Results({
           snapshot_date: snapshotDate,
           player_name: clean,
           score: completed.total,
-          user_id: userId,
+          user_id: resolvedUserId,
         });
         error = insertErr;
       }
