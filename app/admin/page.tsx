@@ -202,7 +202,6 @@ export default async function AdminPage() {
     return s.size;
   })();
 
-  const dauUnique = countUnique(todayRows);
   const dauSessions = todayRows.length;
 
   const wauUnique = countUnique(weekRows);
@@ -269,15 +268,21 @@ export default async function AdminPage() {
 
         {/* Daily active */}
         <SectionHeading>Daily active ({today})</SectionHeading>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+
+        {/* Hero metric — closest thing to "how many real people opened
+            the app today" because it keys on session_id, which every
+            browser has whether they sign in or play or not. */}
+        <HeroStatCard
+          label="Unique visitors today"
+          value={uniqueSessionsToday}
+          hint="Distinct session_ids in game_events — counts guests too"
+        />
+
+        <div className="mt-3 sm:mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <StatCard
-            label="Daily Challenge players today"
-            value={dauUnique}
-          />
-          <StatCard
-            label="Daily submissions today"
+            label="Daily Challenge submissions today"
             value={dauSessions}
-            hint="All submissions, not deduped"
+            hint="Rows in daily_scores — players who submitted a named score"
           />
           <StatCard label="Solo plays today" value={soloPlaysToday} />
           <StatCard
@@ -287,10 +292,14 @@ export default async function AdminPage() {
         </div>
 
         {/* Today's plays by mode — from game_events. Start/complete pairs
-            show drop-off per mode; unique sessions covers all visitors
-            regardless of sign-in status (key is session_id, which every
-            browser has whether they play or not). */}
+            show drop-off per mode for all players, including guests who
+            never submitted a name. */}
         <SectionHeading>Today&rsquo;s plays by mode</SectionHeading>
+        <p className="-mt-2 mb-5 font-mono text-[10px] tracking-[1px] uppercase text-muted leading-[1.5] max-w-3xl">
+          Starts and completes are tracked via game events (all players
+          including guests). Submissions counts only players who
+          submitted a named score to the leaderboard.
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <ModeCard
             label="Daily Challenge"
@@ -306,13 +315,6 @@ export default async function AdminPage() {
             label="Higher or Lower"
             starts={holStarts}
             completes={holCompletes}
-          />
-        </div>
-        <div className="mt-3 sm:mt-4 grid grid-cols-1 gap-3 sm:gap-4">
-          <StatCard
-            label="Unique visitors today"
-            value={uniqueSessionsToday}
-            hint="Distinct session_ids in game_events — counts guests too"
           />
         </div>
 
@@ -434,6 +436,38 @@ function StatCard({
       </div>
       {hint && (
         <div className="mt-2 font-mono text-[9px] tracking-[1px] uppercase text-muted">
+          {hint}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Full-width hero variant of StatCard. Used for the headline metric at
+// the top of the Daily Active section so it visually outranks the
+// per-mode breakdown below it.
+function HeroStatCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: number;
+  hint?: string;
+}) {
+  return (
+    <div className="bg-surface border border-spotify/40 rounded-lg p-6 sm:p-8">
+      <div className="font-mono text-[11px] tracking-[3px] uppercase text-spotify">
+        {label}
+      </div>
+      <div
+        className="mt-3 font-display tabular-nums leading-none text-spotify"
+        style={{ fontSize: "clamp(48px, 8vw, 88px)" }}
+      >
+        {value.toLocaleString()}
+      </div>
+      {hint && (
+        <div className="mt-3 font-mono text-[10px] tracking-[1px] uppercase text-muted">
           {hint}
         </div>
       )}
