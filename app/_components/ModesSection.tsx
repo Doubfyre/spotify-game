@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { supabase, createBrowserSupabase } from "@/lib/supabase";
-import { getTodayLondon, msUntilLondonMidnight } from "@/lib/dates";
+import { createBrowserSupabase } from "@/lib/supabase";
+import { msUntilLondonMidnight } from "@/lib/dates";
 import HomeCardLeaderboard, {
   type HomeLeaderboardVariant,
 } from "./HomeCardLeaderboard";
@@ -146,7 +146,6 @@ export default function ModesSection({
             />
           ))}
         </div>
-        <PlayerCountLine />
         <div className="text-center">
           <Link
             href="/privacy"
@@ -509,64 +508,6 @@ function PartyVisual() {
       <div className="mt-1 sm:mt-3 font-mono text-[9px] sm:text-[10px] tracking-[1.5px] sm:tracking-[2px] uppercase text-muted">
         Pass &amp; Play or Online
       </div>
-    </div>
-  );
-}
-
-// ------------------------------------------------------------
-// Live player count (Supabase count query, refreshed every 60s)
-// ------------------------------------------------------------
-
-function PlayerCountLine() {
-  const [count, setCount] = useState<number | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      // Recompute "today" in London on every poll so the counter rolls over
-      // at midnight UK even when a tab has been left open past midnight.
-      const todayLondon = getTodayLondon();
-
-      // PostgREST doesn't expose COUNT(DISTINCT …), so we fetch the two
-      // identity columns for today's rows and dedupe client-side. Daily
-      // submission volume is small (thousands of rows at most) so the extra
-      // bytes beat an RPC + migration.
-      const { data, error } = await supabase
-        .from("daily_scores")
-        .select("user_id, player_name")
-        .eq("snapshot_date", todayLondon);
-      if (cancelled) return;
-      if (error) {
-        setCount(null);
-        return;
-      }
-      const unique = new Set<string>();
-      for (const row of (data ?? []) as Array<{
-        user_id: string | null;
-        player_name: string | null;
-      }>) {
-        // Prefer user_id (stable across name changes); fall back to
-        // player_name for anonymous submissions.
-        const key = row.user_id ?? row.player_name;
-        if (key) unique.add(String(key));
-      }
-      setCount(unique.size);
-    }
-    load();
-    const id = setInterval(load, 15_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
-
-  // Hide the whole line when we don't have something useful to say.
-  if (count === null || count <= 0) return <div className="h-4" aria-hidden />;
-
-  return (
-    <div className="font-mono text-[10px] sm:text-[11px] tracking-[2px] uppercase text-muted text-center">
-      {count.toLocaleString()} {count === 1 ? "person has" : "people have"}{" "}
-      played today
     </div>
   );
 }
