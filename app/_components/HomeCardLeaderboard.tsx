@@ -2,9 +2,14 @@
 
 // Per-mode leaderboard modal triggered from the homepage cards. Three
 // variants:
-//   - solo:        solo_scores,         score  desc
-//   - daily:       daily_scores,        score  asc  (lower wins)
-//   - higherlower: higher_lower_scores, streak desc
+//   - solo:        solo_scores         + solo_scores_best          (score  desc)
+//   - daily:       daily_scores        + daily_scores_best         (score  asc — lower wins)
+//   - higherlower: higher_lower_scores + higher_lower_scores_best  (streak desc)
+//
+// All-time queries hit the *_best Postgres views (server-side
+// MAX/MIN GROUP BY player_name); today queries still hit raw rows
+// because the views aren't date-scoped. View migration SQL lives at
+// the top of HighScoreLeaderboard.tsx — same migration covers both.
 //
 // Lazy-fetches on first open so the homepage render doesn't pay for
 // tables the user never looks at. Portaled to document.body (same
@@ -21,11 +26,10 @@ export type HomeLeaderboardVariant = "solo" | "daily" | "higherlower";
 type Row = { player_name: string; metric: number };
 
 const TOP_LIMIT = 5;
-// Over-fetch so client-side MAX-per-name dedupe still produces 5
-// distinct names. Submits insert a row per game now, so a single
-// dominant player can take many of the top raw rows; we want enough
-// headroom that the top 5 is still 5 different people.
-const OVER_FETCH = 60;
+// Over-fetch budget for the today list only. The all-time list reads
+// from the *_best views and is already deduped server-side, so it
+// fetches exactly TOP_LIMIT.
+const TODAY_OVER_FETCH = 20;
 
 async function fetchForVariant(
   variant: HomeLeaderboardVariant,
@@ -39,69 +43,67 @@ async function fetchForVariant(
 
   if (variant === "solo") {
     const allTimeP = supabase
-      .from("solo_scores")
+      .from("solo_scores_best")
       .select("player_name, score")
       .order("score", { ascending: false })
-      .order("created_at", { ascending: true })
-      .limit(OVER_FETCH);
-    // Filter sits ahead of order/limit so PostgREST applies the WHERE
-    // clause unambiguously. The today list is a fresh, separate query
-    // — it never sees rows older than today's London midnight.
+      .order("player_name", { ascending: true })
+      .limit(TOP_LIMIT);
     const todayP = supabase
       .from("solo_scores")
       .select("player_name, score")
       .gte("created_at", todayStartISO)
       .order("score", { ascending: false })
       .order("created_at", { ascending: true })
-      .limit(OVER_FETCH);
+      .limit(TODAY_OVER_FETCH);
     const [a, t] = await Promise.all([allTimeP, todayP]);
     throwIfError(a.error, t.error);
     return {
-      all: collapse(normalise(a.data as unknown[], "score"), "desc"),
+      // View is already deduped server-side — no collapse for all-time.
+      all: normalise(a.data as unknown[], "score").slice(0, TOP_LIMIT),
       today: collapse(normalise(t.data as unknown[], "score"), "desc"),
     };
   }
   if (variant === "higherlower") {
     const allTimeP = supabase
-      .from("higher_lower_scores")
+      .from("higher_lower_scores_best")
       .select("player_name, streak")
       .order("streak", { ascending: false })
-      .order("created_at", { ascending: true })
-      .limit(OVER_FETCH);
+      .order("player_name", { ascending: true })
+      .limit(TOP_LIMIT);
     const todayP = supabase
       .from("higher_lower_scores")
       .select("player_name, streak")
       .gte("created_at", todayStartISO)
       .order("streak", { ascending: false })
       .order("created_at", { ascending: true })
-      .limit(OVER_FETCH);
+      .limit(TODAY_OVER_FETCH);
     const [a, t] = await Promise.all([allTimeP, todayP]);
     throwIfError(a.error, t.error);
     return {
-      all: collapse(normalise(a.data as unknown[], "streak"), "desc"),
+      all: normalise(a.data as unknown[], "streak").slice(0, TOP_LIMIT),
       today: collapse(normalise(t.data as unknown[], "streak"), "desc"),
     };
   }
-  // daily — filter on snapshot_date (a date column), not created_at.
-  // Each daily submission is keyed to the London day it covers, so
-  // this naturally scopes the today list to today's challenge.
+  // daily — all-time view + today filter on snapshot_date (a date
+  // column, not created_at). Each daily submission is keyed to the
+  // London day it covers, so eq() naturally scopes today's list.
   const allTimeP = supabase
-    .from("daily_scores")
+    .from("daily_scores_best")
     .select("player_name, score")
     .order("score", { ascending: true })
-    .order("created_at", { ascending: true })
-    .limit(OVER_FETCH);
+    .order("player_name", { ascending: true })
+    .limit(TOP_LIMIT);
   const todayP = supabase
     .from("daily_scores")
     .select("player_name, score")
     .eq("snapshot_date", snapshot)
     .order("score", { ascending: true })
     .order("created_at", { ascending: true })
-    .limit(OVER_FETCH);
+    .limit(TODAY_OVER_FETCH);
   const [a, t] = await Promise.all([allTimeP, todayP]);
   throwIfError(a.error, t.error);
   return {
-    all: collapse(normalise(a.data as unknown[], "score"), "asc"),
+    all: normalise(a.data as unknown[], "score").slice(0, TOP_LIMIT),
     today: collapse(normalise(t.data as unknown[], "score"), "asc"),
   };
 }

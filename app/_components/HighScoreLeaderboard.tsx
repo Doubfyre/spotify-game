@@ -1,14 +1,34 @@
 "use client";
 
 // Shared higher-is-better leaderboard used by Solo Play and Higher or
-// Lower results screens. Two tabs: ALL TIME and TODAY. Highlights the
-// current player's row if they land in the top 10; otherwise appends a
-// "your rank" divider + row at the bottom, matching the pattern from
-// the daily-challenge leaderboard.
+// Lower results screens. Two tabs: ALL TIME and TODAY.
 //
-// This intentionally doesn't try to unify with the daily leaderboard,
-// which is lower-is-better and keyed on snapshot_date rather than a
-// raw created_at cutoff.
+// All-time queries hit Postgres views that pre-aggregate MAX/MIN per
+// player_name, so a single dominant player can't crowd out distinct
+// names. Today queries still hit the raw tables and dedupe in the
+// client because the views aren't date-scoped.
+//
+// ---------------------------------------------------------------------
+// One-time migration. Run this in the Supabase SQL editor:
+//
+//   create or replace view public.solo_scores_best as
+//   select player_name, max(score) as score, min(created_at) as first_at
+//   from public.solo_scores
+//   group by player_name;
+//
+//   create or replace view public.higher_lower_scores_best as
+//   select player_name, max(streak) as streak, min(created_at) as first_at
+//   from public.higher_lower_scores
+//   group by player_name;
+//
+//   create or replace view public.daily_scores_best as
+//   select player_name, min(score) as score, min(created_at) as first_at
+//   from public.daily_scores
+//   group by player_name;
+//
+//   grant select on public.solo_scores_best         to anon, authenticated;
+//   grant select on public.higher_lower_scores_best to anon, authenticated;
+//   grant select on public.daily_scores_best        to anon, authenticated;
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -17,24 +37,24 @@ import { getTodayLondon, londonDayStartUTC } from "@/lib/dates";
 type Row = {
   player_name: string;
   metric: number;
+  // Empty string when the row came from an aggregated view — we don't
+  // surface created_at for all-time entries (no useful "when").
   created_at: string;
 };
 
 type Tab = "all" | "today";
 
 const TOP_LIMIT = 10;
-// Over-fetch so client-side MAX-per-name dedupe still produces 10
-// distinct names. Submits now insert a row per game, so a single
-// dominant player can take many of the top raw rows; we want enough
-// headroom that we don't run out of distinct names. Tuned for a few
-// hundred submissions per day; raise if dedupe regularly truncates.
-const OVER_FETCH = 100;
+// Over-fetch budget for the today list only. The all-time list reads
+// from the *_best views which are already deduped server-side, so it
+// fetches exactly TOP_LIMIT. Today still over-fetches because we
+// dedupe in the client (views aren't date-scoped).
+const TODAY_OVER_FETCH = 20;
 const POLL_MS = 30_000;
 
 // Collapses duplicate player_names to one row each, keeping the best
-// metric (higher-is-better in this component). Input should already be
-// sorted best-first, which makes the first occurrence per name the one
-// to keep. Case-insensitive match so "jack" and "Jack" collapse.
+// metric (higher-is-better in this component). Used only for today's
+// list now — all-time is server-side aggregated.
 function dedupeByName(rows: Row[]): Row[] {
   const best = new Map<string, Row>();
   for (const r of rows) {
@@ -73,22 +93,24 @@ export default function HighScoreLeaderboard({
     const today = getTodayLondon();
     const todayStartISO = londonDayStartUTC(today);
 
+    // All-time: query the view (one row per player_name, MAX metric).
+    // No over-fetch, no client-side dedupe — Postgres has done both.
     const topAll = supabase
-      .from(table)
-      .select(`player_name, ${metricColumn}, created_at`)
+      .from(`${table}_best`)
+      .select(`player_name, ${metricColumn}`)
       .order(metricColumn, { ascending: false })
-      .order("created_at", { ascending: true }) // ties: earliest wins
-      .limit(OVER_FETCH);
-    // Today fetch: filter BEFORE order/limit so PostgREST applies the
-    // WHERE clause first. Same query as topAll but scoped to rows
-    // created on or after the current London day's start.
+      .order("player_name", { ascending: true }) // stable secondary
+      .limit(TOP_LIMIT);
+    // Today: raw rows + client dedupe. The view isn't date-scoped, so
+    // we still need the today list to read recent rows directly. Over-
+    // fetch is small because today's volume is bounded.
     const topToday = supabase
       .from(table)
       .select(`player_name, ${metricColumn}, created_at`)
       .gte("created_at", todayStartISO)
       .order(metricColumn, { ascending: false })
       .order("created_at", { ascending: true })
-      .limit(OVER_FETCH);
+      .limit(TODAY_OVER_FETCH);
 
     const [a, t] = await Promise.all([topAll, topToday]);
 
@@ -106,14 +128,8 @@ export default function HighScoreLeaderboard({
         created_at: String(r.created_at ?? ""),
       }));
 
-    const allNormalised = normalise((a.data ?? []) as unknown[]);
-    const todayNormalised = normalise((t.data ?? []) as unknown[]);
-
-    // Dedupe runs on each result set independently. The today list
-    // never sees yesterday's rows because they're filtered out at the
-    // query level — dedupeByName here only collapses today's MAX.
-    setAllRows(dedupeByName(allNormalised));
-    setTodayRows(dedupeByName(todayNormalised));
+    setAllRows(normalise((a.data ?? []) as unknown[]));
+    setTodayRows(dedupeByName(normalise((t.data ?? []) as unknown[])));
   }, [table, metricColumn]);
 
   useEffect(() => {
@@ -215,7 +231,7 @@ function Body({
         const mine = mineInList(row);
         return (
           <li
-            key={`${row.created_at}-${i}`}
+            key={`${row.player_name}-${i}`}
             className={`flex items-center gap-4 px-5 py-3 border-b border-border/60 last:border-b-0 ${mine ? "bg-spotify/5" : ""}`}
           >
             <span
