@@ -5,6 +5,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { getCachedUser } from "@/lib/auth";
 import { getTodayLondon, addDays, londonDayStartUTC } from "@/lib/dates";
 import { isAdminEmail } from "@/lib/admin";
 import AutoRefresh from "./AutoRefresh";
@@ -90,13 +91,13 @@ function formatDateTime(iso: string): string {
 }
 
 export default async function AdminPage() {
-  // Auth gate: anonymous → signin, wrong user → home.
-  const supa = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supa.auth.getUser();
+  // Auth gate: anonymous → signin, wrong user → home. The user is
+  // shared with the layout via getCachedUser, so this isn't a second
+  // round-trip.
+  const user = await getCachedUser();
   if (!user) redirect("/signin?next=/admin");
   if (!isAdminEmail(user.email)) redirect("/");
+  const supa = await createServerSupabase();
 
   const today = getTodayLondon();
   const weekAgoDate = addDays(today, -7);

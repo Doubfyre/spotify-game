@@ -75,10 +75,11 @@
 //   alter table public.used_artists enable row level security;
 //   create policy "public read" on public.used_artists for select using (true);
 
-import Link from "next/link";
 import { supabase, type ArtistRow } from "@/lib/supabase";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { getCachedUser } from "@/lib/auth";
 import { getTodayLondon } from "@/lib/dates";
+import PageError from "@/app/_components/PageError";
 import DailyChallenge, { type ArtistPick } from "./DailyChallenge";
 
 export const dynamic = "force-dynamic";
@@ -188,12 +189,12 @@ export default async function DailyPage() {
 
   if (artistErr) {
     return (
-      <ErrorState title="Couldn't load artists" detail={artistErr.message} />
+      <PageError title="Couldn't load artists" detail={artistErr.message} />
     );
   }
   if (!artistData || artistData.length === 0) {
     return (
-      <ErrorState
+      <PageError
         title="No snapshot for today"
         detail={`No rows found in artist_snapshots for ${snapshotDate}. Run "npm run scrape" and try again.`}
       />
@@ -211,7 +212,7 @@ export default async function DailyPage() {
 
   if (usedErr) {
     return (
-      <ErrorState
+      <PageError
         title="Couldn't load cooldown ledger"
         detail={`${usedErr.message} — check that the used_artists table exists (SQL is in a comment at the top of app/daily/page.tsx).`}
       />
@@ -232,7 +233,7 @@ export default async function DailyPage() {
   );
   if (pool.length < PICKS_PER_DAY) {
     return (
-      <ErrorState
+      <PageError
         title="Pool exhausted"
         detail={`Only ${pool.length} eligible artists after the ${COOLDOWN_DAYS}-day cooldown — can't pick ${PICKS_PER_DAY}.`}
       />
@@ -267,16 +268,12 @@ export default async function DailyPage() {
   let alreadyPlayed = false;
   let existingScore: number | null = null;
   let existingName: string | null = null;
-  const authSupabase = await createServerSupabase();
-  const { data: authData, error: authErr } = await authSupabase.auth.getUser();
-  const user = authData?.user ?? null;
-  if (authErr) {
-    console.warn("[daily-gate] auth.getUser error —", authErr.message);
-  }
+  const user = await getCachedUser();
   if (user) {
     // Use .limit(1) + array read instead of .maybeSingle() so the gate
     // is robust even if the partial unique index hasn't been created yet
     // and there's more than one row for this (user, day) combo.
+    const authSupabase = await createServerSupabase();
     const { data: existingRows, error: gateErr } = await authSupabase
       .from("daily_scores")
       .select("score, player_name")
@@ -310,30 +307,5 @@ export default async function DailyPage() {
       existingScore={existingScore}
       existingName={existingName}
     />
-  );
-}
-
-function ErrorState({ title, detail }: { title: string; detail: string }) {
-  return (
-    <main className="flex-1 flex items-center justify-center px-5 sm:px-10 pt-32 pb-16">
-      <div className="w-full max-w-lg bg-surface border border-border rounded-lg p-10 text-center">
-        <div className="font-mono text-[11px] tracking-[3px] uppercase text-muted mb-4">
-          Error
-        </div>
-        <h1
-          className="font-display leading-none tracking-[2px] text-foreground"
-          style={{ fontSize: "clamp(40px, 6vw, 64px)" }}
-        >
-          {title}
-        </h1>
-        <p className="text-muted mt-4 mb-8">{detail}</p>
-        <Link
-          href="/"
-          className="inline-block border border-border text-foreground rounded-[4px] px-6 py-3 text-sm hover:border-foreground transition"
-        >
-          Back to home
-        </Link>
-      </div>
-    </main>
   );
 }

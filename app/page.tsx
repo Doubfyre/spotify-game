@@ -1,5 +1,6 @@
 import ModesSection from "./_components/ModesSection";
 import { getTodayLondon } from "@/lib/dates";
+import { getCachedUser } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase-server";
 
 // Deterministic floating-number config. Hardcoded (not Math.random()) so the
@@ -54,28 +55,30 @@ function todayLondon(): { snapshot: string; tag: string } {
 export default async function Home() {
   const { snapshot, tag } = todayLondon();
 
-  // Cross-device "completed today" check: for logged-in users, the source
-  // of truth is a row in daily_scores. Falls back to the client's
-  // localStorage check inside ModesSection for anonymous visitors.
+  // Cross-device "completed today" check: for logged-in users, the
+  // source of truth is a row in daily_scores. Falls back to the
+  // client's localStorage check inside ModesSection for anonymous
+  // visitors. The user lookup is shared with the layout via
+  // getCachedUser. No outer try/catch — Next.js relies on the
+  // cookies-throws-DynamicServerUsage signal to mark this route as
+  // dynamic, and supabase queries return { error } rather than
+  // throwing, so there's nothing meaningful to catch here.
   let serverDailyCompleted = false;
-  try {
+  const user = await getCachedUser();
+  if (user) {
     const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase
-        .from("daily_scores")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("snapshot_date", snapshot)
-        .limit(1)
-        .maybeSingle();
-      if (data) serverDailyCompleted = true;
+    const { data, error } = await supabase
+      .from("daily_scores")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("snapshot_date", snapshot)
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.warn("[home] daily completion check failed —", error.message);
+    } else if (data) {
+      serverDailyCompleted = true;
     }
-  } catch {
-    // Auth/query failure should not block the homepage — card just falls
-    // back to localStorage detection.
   }
 
   return (

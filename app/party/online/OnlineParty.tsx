@@ -38,6 +38,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createBrowserSupabase } from "@/lib/supabase";
 import type { ArtistRow } from "@/lib/supabase";
 import { fuzzyFind } from "@/lib/fuzzy";
+import { pointsForRank } from "@/lib/scoring";
 import { trackEvent } from "@/lib/tracking";
 
 // ============================================================
@@ -113,11 +114,6 @@ function generateRoomCode(): string {
     out += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
   }
   return out;
-}
-
-function pointsForRank(rank: number | null): number {
-  if (rank === null || rank < 1 || rank > 500) return 0;
-  return rank;
 }
 
 function pickTip(seed: string): string {

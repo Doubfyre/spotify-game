@@ -17,7 +17,12 @@ import OnlineParty from "./OnlineParty";
 
 const LS_NAME_KEY = "party-display-name";
 const LS_GUEST_ID_KEY = "party-guest-id";
-const MAX_NAME_LEN = 24;
+// Aligned with the leaderboard tables' DB-side check
+// (`char_length(player_name) between 1 and 20`). Letting party names
+// exceed 20 was bait for confusion: a 22-char name worked in the
+// lobby but would silently truncate later when the player tried to
+// post a leaderboard score under the same handle.
+const MAX_NAME_LEN = 20;
 
 type Props = {
   initialUserId: string | null;

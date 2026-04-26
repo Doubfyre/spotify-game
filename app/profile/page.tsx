@@ -21,6 +21,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { getCachedUser } from "@/lib/auth";
 import { addDays, getTodayLondon } from "@/lib/dates";
 import SignOutButton from "./SignOutButton";
 
@@ -132,13 +133,11 @@ function computeStats(uniqueRows: ScoreRow[]): {
 }
 
 export default async function ProfilePage() {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) {
     redirect("/signin?next=/profile");
   }
+  const supabase = await createServerSupabase();
 
   const { data: rawRows, error } = await supabase
     .from("daily_scores")

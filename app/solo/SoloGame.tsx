@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserSupabase, type ArtistRow } from "@/lib/supabase";
 import { fuzzyFind } from "@/lib/fuzzy";
+import { pointsForRank } from "@/lib/scoring";
 import { trackEvent } from "@/lib/tracking";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
 import HighScoreLeaderboard from "@/app/_components/HighScoreLeaderboard";
@@ -23,11 +24,6 @@ type Pick = {
   matched: ArtistRow | null;
   points: number;
 };
-
-function pointsForRank(rank: number | null): number {
-  if (rank === null || rank < 1 || rank > 500) return 0;
-  return rank;
-}
 
 export default function SoloGame({
   artists,

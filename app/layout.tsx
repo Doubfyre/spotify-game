@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Bebas_Neue, DM_Sans, DM_Mono } from "next/font/google";
 import "./globals.css";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { getCachedUser } from "@/lib/auth";
 import { isAdminEmail } from "@/lib/admin";
 import Nav, { type NavUser } from "./_components/Nav";
 import PrivacyNotice from "./_components/PrivacyNotice";
@@ -36,12 +36,11 @@ export const metadata: Metadata = {
 // Reads the session cookie on every render. Running this in the root layout
 // opts the whole app into dynamic rendering, which is what we want for an
 // auth-aware shell. For email/password accounts user_metadata is usually
-// empty, so we show the email local-part as the display name.
+// empty, so we show the email local-part as the display name. The
+// underlying getUser() call is cached per render via lib/auth, so
+// pages that also read the user share the same network round-trip.
 async function getNavUser(): Promise<NavUser> {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) return null;
 
   const displayName =

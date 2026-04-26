@@ -174,8 +174,8 @@
 //
 //   delete from auth.users where is_anonymous = true;
 
-import { createServerSupabase } from "@/lib/supabase-server";
 import { supabase as dbReadOnly } from "@/lib/supabase";
+import { getCachedUser } from "@/lib/auth";
 import { getTodayLondon } from "@/lib/dates";
 import OnlinePartyEntry from "./OnlinePartyEntry";
 import type { ArtistRow } from "@/lib/supabase";
@@ -183,10 +183,7 @@ import type { ArtistRow } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 
 export default async function OnlinePartyPage() {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
   // Today's top 500, fetched server-side so the client has data ready when a
   // room starts. Artist list is the same for every player; no need to gate.
