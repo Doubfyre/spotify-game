@@ -87,14 +87,25 @@ export default function PassPlayGame({
     void trackEvent("passplay_start");
   }
 
-  // Always consumes the turn: a miss (not in top 500) is recorded as a
-  // null-match pick worth 0 points, same as solo play. Dedup is handled
-  // by the `candidates` filter (already-picked artists aren't in scope for
-  // fuzzyFind), so a typed duplicate naturally falls through to the miss
-  // branch. Empty input is the only case that doesn't advance.
-  function submitGuess(input: string): void {
+  // Returns { duplicate: true } when the typed name resolves to an
+  // artist that's already been guessed in this party — caller keeps
+  // the player on the GuessScreen so they can try a different name.
+  // Anything else (miss, real match, empty input) advances normally.
+  //
+  // Duplicate check runs BEFORE scoring: we fuzzy-match against the
+  // FULL artist list (not just `candidates`, which already excludes
+  // used artists), then look up the matched spotify_id in the used
+  // set. That way "Drake" matches even when Drake is already taken,
+  // and we can flag it as a dup instead of misclassifying as a miss.
+  function submitGuess(input: string): { duplicate: boolean } {
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed) return { duplicate: false };
+
+    const allMatch = fuzzyFind(trimmed, artists);
+    if (allMatch?.spotify_id && usedArtistIds.has(allMatch.spotify_id)) {
+      return { duplicate: true };
+    }
+
     const match = fuzzyFind(trimmed, candidates);
     const points = pointsForRank(match?.rank ?? null);
     const pick: Pick = {
@@ -124,6 +135,7 @@ export default function PassPlayGame({
       points,
     });
     setStatus("reveal");
+    return { duplicate: false };
   }
 
   // Called when the reveal screen's "Pass" button is clicked. Computes the
@@ -452,13 +464,23 @@ function GuessScreen({
   round: number;
   totalRounds: number;
   players: Player[];
-  onSubmit: (input: string) => void;
+  onSubmit: (input: string) => { duplicate: boolean };
 }) {
   const [input, setInput] = useState("");
+  const [dupError, setDupError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleSubmit() {
-    onSubmit(input);
+    const result = onSubmit(input);
+    if (result.duplicate) {
+      // Already-guessed artist — keep the turn alive.
+      setDupError(
+        "Already guessed in this party — try another artist!",
+      );
+      setInput("");
+      inputRef.current?.focus();
+      return;
+    }
     // Parent transitions to reveal on any non-empty submit and this screen
     // unmounts. Empty input is a silent no-op — the parent returns early.
   }
@@ -504,7 +526,10 @@ function GuessScreen({
             autoComplete="off"
             spellCheck={false}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              if (dupError) setDupError(null);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -514,9 +539,15 @@ function GuessScreen({
             placeholder="e.g. Taylor Swift"
             className="focus-green w-full rounded-2xl bg-surface border border-border px-5 py-4 text-lg text-foreground placeholder:text-muted/60 transition"
           />
-          <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mt-3">
-            Press Enter to submit · spelling is forgiving · no retries
-          </div>
+          {dupError ? (
+            <div className="font-mono text-[11px] tracking-[1px] uppercase text-amber mt-3">
+              {dupError}
+            </div>
+          ) : (
+            <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mt-3">
+              Press Enter to submit · spelling is forgiving · no retries
+            </div>
+          )}
         </div>
 
         <div className="mt-14">

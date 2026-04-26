@@ -433,15 +433,29 @@ function OnlinePartyInner({
     if (error) setError(error.message);
   }
 
-  // Always consumes the turn: a miss (artist not in today's top 500) is
-  // recorded as a null-match pick worth 0 points — same as solo/passplay.
-  // Duplicates are silently excluded via the `candidates` filter above;
-  // a typed dup falls through to the miss branch. Empty input and
-  // not-your-turn are the only retryable errors.
+  // Consumes the turn on miss-or-match. Retryable errors keep the
+  // active player on the GuessScreen with the input cleared:
+  //   - empty input
+  //   - not your turn (race / replay)
+  //   - artist already guessed by anyone in this party session
+  //
+  // Duplicate detection runs BEFORE scoring. We fuzzy-match against
+  // the FULL artist list (not the candidates filter, which already
+  // excludes used artists), then check whether the matched
+  // spotify_id is in the used set. Misses (no match) still consume
+  // the turn — that's the existing 0-point miss behaviour.
   async function handleSubmitGuess(input: string): Promise<{ error?: string }> {
     if (!room || !myPlayer || !isMyTurn) return { error: "Not your turn." };
     const trimmed = input.trim();
     if (!trimmed) return { error: "Type an artist name first." };
+
+    const allMatch = fuzzyFind(trimmed, artists);
+    if (allMatch?.spotify_id && usedSpotifyIds.has(allMatch.spotify_id)) {
+      return {
+        error: "Already guessed in this party — try another artist!",
+      };
+    }
+
     const match = fuzzyFind(trimmed, candidates);
     const points = pointsForRank(match?.rank ?? null);
     await recordAndAdvance(room, myPlayer, {
