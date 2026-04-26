@@ -23,10 +23,12 @@ type Row = {
 type Tab = "all" | "today";
 
 const TOP_LIMIT = 10;
-// Over-fetch so that after collapsing duplicate player_names we still
-// have enough distinct rows to fill the top 10. Logged-in rows are
-// unique per user via the DB partial index; this covers anon submits.
-const OVER_FETCH = TOP_LIMIT * 4;
+// Over-fetch so client-side MAX-per-name dedupe still produces 10
+// distinct names. Submits now insert a row per game, so a single
+// dominant player can take many of the top raw rows; we want enough
+// headroom that we don't run out of distinct names. Tuned for a few
+// hundred submissions per day; raise if dedupe regularly truncates.
+const OVER_FETCH = 100;
 const POLL_MS = 30_000;
 
 // Collapses duplicate player_names to one row each, keeping the best
@@ -52,16 +54,16 @@ export default function HighScoreLeaderboard({
   table: "solo_scores" | "higher_lower_scores";
   metricColumn: "score" | "streak";
   metricLabel: string;
-  // The row the current player just submitted, if they're signed in and
-  // the save succeeded. Null for anon viewers or if the save failed.
-  player: { name: string; metric: number } | null;
+  // Just the display name the current player submitted under. The
+  // leaderboard rows show MAX-per-name, so the metric on the player's
+  // row may be a previous, better submission — we match by name only.
+  // Null for viewers who didn't submit (anon, skipped).
+  player: { name: string } | null;
 }) {
   const [tab, setTab] = useState<Tab>("all");
   const [allRows, setAllRows] = useState<Row[] | null>(null);
   const [todayRows, setTodayRows] = useState<Row[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [allRank, setAllRank] = useState<number | null>(null);
-  const [todayRank, setTodayRank] = useState<number | null>(null);
 
   const todayStartISO = useMemo(
     () => londonDayStartUTC(getTodayLondon()),
@@ -69,9 +71,11 @@ export default function HighScoreLeaderboard({
   );
 
   const fetchAll = useCallback(async () => {
-    // Run the four queries in parallel — top 10 + optional rank, for
-    // each of the two tabs. Rank lookups are skipped when there's no
-    // player row to rank (anon viewer).
+    // Two queries in parallel: top-N raw rows for the all-time and
+    // today views. The exact "where am I in the rank" line we used to
+    // show is gone — counting raw rows after always-INSERT no longer
+    // matches the deduped leaderboard's notion of rank, and a true
+    // GROUP BY-based rank would need a Postgres view we don't have.
     const topAll = supabase
       .from(table)
       .select(`player_name, ${metricColumn}, created_at`)
@@ -85,35 +89,10 @@ export default function HighScoreLeaderboard({
       .order(metricColumn, { ascending: false })
       .order("created_at", { ascending: true })
       .limit(OVER_FETCH);
-    const rankAll = player
-      ? supabase
-          .from(table)
-          .select("*", { count: "exact", head: true })
-          .gt(metricColumn, player.metric)
-      : Promise.resolve({ count: null, error: null });
-    const rankToday = player
-      ? supabase
-          .from(table)
-          .select("*", { count: "exact", head: true })
-          .gte("created_at", todayStartISO)
-          .gt(metricColumn, player.metric)
-      : Promise.resolve({ count: null, error: null });
 
-    const [a, t, ra, rt] = await Promise.all([
-      topAll,
-      topToday,
-      rankAll,
-      rankToday,
-    ]);
+    const [a, t] = await Promise.all([topAll, topToday]);
 
-    const firstErr =
-      a.error?.message ??
-      t.error?.message ??
-      // Pending supabase-js versions type the count-only result loosely;
-      // normalise by optional-chaining the error field.
-      (ra as { error?: { message?: string } }).error?.message ??
-      (rt as { error?: { message?: string } }).error?.message ??
-      null;
+    const firstErr = a.error?.message ?? t.error?.message ?? null;
     if (firstErr) {
       setErr(firstErr);
       return;
@@ -129,11 +108,7 @@ export default function HighScoreLeaderboard({
 
     setAllRows(dedupeByName(normalise((a.data ?? []) as unknown[])));
     setTodayRows(dedupeByName(normalise((t.data ?? []) as unknown[])));
-    const raCount = (ra as { count: number | null }).count;
-    const rtCount = (rt as { count: number | null }).count;
-    setAllRank(player && raCount !== null ? raCount + 1 : null);
-    setTodayRank(player && rtCount !== null ? rtCount + 1 : null);
-  }, [table, metricColumn, player, todayStartISO]);
+  }, [table, metricColumn, todayStartISO]);
 
   useEffect(() => {
     fetchAll();
@@ -142,7 +117,6 @@ export default function HighScoreLeaderboard({
   }, [fetchAll]);
 
   const activeRows = tab === "all" ? allRows : todayRows;
-  const activeRank = tab === "all" ? allRank : todayRank;
 
   return (
     <section className="mt-12">
@@ -160,13 +134,7 @@ export default function HighScoreLeaderboard({
         </TabButton>
       </div>
 
-      <Body
-        rows={activeRows}
-        err={err}
-        metricLabel={metricLabel}
-        player={player}
-        playerRank={activeRank}
-      />
+      <Body rows={activeRows} err={err} player={player} />
     </section>
   );
 }
@@ -198,15 +166,11 @@ function TabButton({
 function Body({
   rows,
   err,
-  metricLabel,
   player,
-  playerRank,
 }: {
   rows: Row[] | null;
   err: string | null;
-  metricLabel: string;
-  player: { name: string; metric: number } | null;
-  playerRank: number | null;
+  player: { name: string } | null;
 }) {
   if (err) {
     return (
@@ -230,16 +194,14 @@ function Body({
     );
   }
 
-  // Highlight rows matching the player by (name, metric). Matches the
-  // daily-challenge pattern: same-name strangers with different metrics
-  // won't highlight, and the player's own row is always safe to match.
+  // Match by name only. After always-INSERT + MAX-per-name dedupe, the
+  // row that represents this player on the board may carry a higher
+  // metric than the run they just submitted. Two anonymous players with
+  // the same name collapse to one displayed row anyway, so highlighting
+  // by name aligns with what the leaderboard actually shows.
   const mineInList = (row: Row) =>
     player !== null &&
-    row.player_name === player.name &&
-    row.metric === player.metric;
-  const inList = rows.some(mineInList);
-  const outsideTop =
-    player !== null && playerRank !== null && playerRank > rows.length && !inList;
+    row.player_name.toLowerCase() === player.name.toLowerCase();
 
   return (
     <ol className="bg-surface border border-border rounded-lg overflow-hidden">
@@ -266,25 +228,6 @@ function Body({
           </li>
         );
       })}
-
-      {outsideTop && player !== null && playerRank !== null && (
-        <>
-          <li className="flex items-center gap-4 px-5 py-2 border-t border-border bg-background/40 font-mono text-[10px] tracking-[2px] uppercase text-muted">
-            <span className="flex-1">Your {metricLabel.toLowerCase()}</span>
-          </li>
-          <li className="flex items-center gap-4 px-5 py-3 bg-spotify/5">
-            <span className="font-display text-[20px] leading-none w-10 shrink-0 text-spotify">
-              {playerRank}
-            </span>
-            <span className="flex-1 truncate text-spotify font-medium">
-              {player.name}
-            </span>
-            <span className="font-mono text-[13px] text-spotify tabular-nums">
-              {player.metric.toLocaleString()}
-            </span>
-          </li>
-        </>
-      )}
     </ol>
   );
 }

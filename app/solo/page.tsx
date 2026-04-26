@@ -9,30 +9,20 @@
 //   );
 //   create index solo_scores_score_idx on public.solo_scores (score desc);
 //   create index solo_scores_created_idx on public.solo_scores (created_at desc);
-//   grant select, insert, update on public.solo_scores to anon, authenticated;
+//   grant select, insert on public.solo_scores to anon, authenticated;
 //   alter table public.solo_scores enable row level security;
 //   create policy "public read" on public.solo_scores for select using (true);
 //   create policy "public insert" on public.solo_scores for insert with check (true);
-//   create policy "public update" on public.solo_scores for update using (true);
 //
-//   -- Dedupe: one leaderboard row per signed-in player. Partial index so
-//   -- anonymous submissions (user_id NULL) aren't constrained. Required
-//   -- for the ON CONFLICT (user_id) upsert in SoloGame.tsx.
-//   create unique index solo_scores_user_idx on public.solo_scores (user_id) where user_id is not null;
+// Submit semantics: every completed solo game inserts a fresh row. The
+// leaderboard takes MAX(score) per player_name client-side, so a player
+// can play repeatedly without losing their record.
 //
-// One-time cleanup if the table already has multiple rows per user from
-// the old insert-every-game flow — keep the best row per user, delete
-// the rest. Safe to run before or after creating the unique index, but
-// the index creation will fail if duplicates still exist, so run this
-// first:
+// IF you previously created the partial unique index from an older
+// version of this comment, drop it — it now blocks the second insert
+// from a logged-in player and fresh-day submissions stop working:
 //
-//   with ranked as (
-//     select id,
-//            row_number() over (partition by user_id order by score desc, created_at asc) as rn
-//     from public.solo_scores
-//     where user_id is not null
-//   )
-//   delete from public.solo_scores where id in (select id from ranked where rn > 1);
+//   drop index if exists public.solo_scores_user_idx;
 
 import Link from "next/link";
 import { supabase, type ArtistRow } from "@/lib/supabase";

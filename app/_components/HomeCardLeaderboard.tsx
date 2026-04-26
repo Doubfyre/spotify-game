@@ -21,10 +21,11 @@ export type HomeLeaderboardVariant = "solo" | "daily" | "higherlower";
 type Row = { player_name: string; metric: number };
 
 const TOP_LIMIT = 5;
-// Over-fetch so there's enough to dedupe by player_name and still show
-// a full top 5. Logged-in rows are already unique per user via the DB
-// partial index; this covers anonymous submissions.
-const OVER_FETCH = 25;
+// Over-fetch so client-side MAX-per-name dedupe still produces 5
+// distinct names. Submits insert a row per game now, so a single
+// dominant player can take many of the top raw rows; we want enough
+// headroom that the top 5 is still 5 different people.
+const OVER_FETCH = 60;
 
 async function fetchForVariant(
   variant: HomeLeaderboardVariant,

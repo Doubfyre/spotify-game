@@ -21,29 +21,20 @@
 //   );
 //   create index higher_lower_scores_streak_idx on public.higher_lower_scores (streak desc);
 //   create index higher_lower_scores_created_idx on public.higher_lower_scores (created_at desc);
-//   grant select, insert, update on public.higher_lower_scores to anon, authenticated;
+//   grant select, insert on public.higher_lower_scores to anon, authenticated;
 //   alter table public.higher_lower_scores enable row level security;
 //   create policy "public read" on public.higher_lower_scores for select using (true);
 //   create policy "public insert" on public.higher_lower_scores for insert with check (true);
-//   create policy "public update" on public.higher_lower_scores for update using (true);
 //
-//   -- Dedupe: one leaderboard row per signed-in player. Partial index so
-//   -- anonymous submissions (user_id NULL) aren't constrained. Required
-//   -- for the ON CONFLICT (user_id) upsert in HigherOrLowerGame.tsx.
-//   create unique index higher_lower_scores_user_idx
-//     on public.higher_lower_scores (user_id) where user_id is not null;
+// Submit semantics: every completed run inserts a fresh row. The
+// leaderboard takes MAX(streak) per player_name client-side so a
+// player can replay without losing their record.
 //
-// One-time cleanup if the table already has multiple rows per user from
-// the old insert-every-run flow. Run BEFORE creating the unique index
-// (the index creation will fail if duplicates still exist).
+// IF you previously created the partial unique index from an older
+// version of this comment, drop it — it now blocks the second insert
+// from a logged-in player and replays stop working:
 //
-//   with ranked as (
-//     select id,
-//            row_number() over (partition by user_id order by streak desc, created_at asc) as rn
-//     from public.higher_lower_scores
-//     where user_id is not null
-//   )
-//   delete from public.higher_lower_scores where id in (select id from ranked where rn > 1);
+//   drop index if exists public.higher_lower_scores_user_idx;
 
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";

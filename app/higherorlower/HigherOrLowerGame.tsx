@@ -396,9 +396,6 @@ function GameOver({
     "pending" | "submitted" | "skipped"
   >("pending");
   const [submittedAs, setSubmittedAs] = useState<string | null>(null);
-  // Metric actually stored (may reflect a higher existing streak if the
-  // conditional upsert decided to keep it). Drives the highlight.
-  const [submittedMetric, setSubmittedMetric] = useState<number | null>(null);
   const [initialName, setInitialName] = useState<string>("");
   const isNewBest = streak > 0 && streak >= best;
 
@@ -420,63 +417,16 @@ function GameOver({
   }, []);
 
   async function submitLeaderboard(name: string) {
+    // Always INSERT — every run's streak is recorded as its own row.
+    // Leaderboard view aggregates MAX(streak) per player_name client-
+    // side, so a player can play repeatedly without a partial unique
+    // index blocking the second insert.
     const supa = createBrowserSupabase();
     const {
       data: { user },
     } = await supa.auth.getUser();
-
-    if (user?.id) {
-      // Logged-in: dedupe on user_id via select-then-update-or-insert.
-      // PostgREST upsert with onConflict can't target a partial unique
-      // index (WHERE user_id IS NOT NULL), so we drive the dedupe from
-      // the client.
-      const { data: existing, error: readErr } = await supa
-        .from("higher_lower_scores")
-        .select("player_name, streak")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (readErr) {
-        console.error("[hol] higher_lower_scores read failed", readErr);
-        throw new Error(readErr.message);
-      }
-      const existingRow = existing as
-        | { player_name: string; streak: number }
-        | null;
-
-      if (existingRow) {
-        if (existingRow.streak >= streak) {
-          setSubmittedAs(existingRow.player_name);
-          setSubmittedMetric(existingRow.streak);
-          setSubmitStatus("submitted");
-          return;
-        }
-        const { error: updateErr } = await supa
-          .from("higher_lower_scores")
-          .update({ player_name: name, streak })
-          .eq("user_id", user.id);
-        if (updateErr) {
-          console.error("[hol] higher_lower_scores update failed", updateErr);
-          throw new Error(updateErr.message);
-        }
-      } else {
-        const { error: insertErr } = await supa
-          .from("higher_lower_scores")
-          .insert({ user_id: user.id, player_name: name, streak });
-        if (insertErr) {
-          console.error("[hol] higher_lower_scores insert failed", insertErr);
-          throw new Error(insertErr.message);
-        }
-      }
-      setSubmittedAs(name);
-      setSubmittedMetric(streak);
-      setSubmitStatus("submitted");
-      return;
-    }
-
-    // Anonymous: plain insert, dedupe is best-effort client-side in the
-    // leaderboard views.
     const { error } = await supa.from("higher_lower_scores").insert({
-      user_id: null,
+      user_id: user?.id ?? null,
       player_name: name,
       streak,
     });
@@ -485,7 +435,6 @@ function GameOver({
       throw new Error(error.message);
     }
     setSubmittedAs(name);
-    setSubmittedMetric(streak);
     setSubmitStatus("submitted");
   }
   // Only show the final pairing reveal if the game actually ended on a
@@ -593,11 +542,7 @@ function GameOver({
             table="higher_lower_scores"
             metricColumn="streak"
             metricLabel="Streak"
-            player={
-              submittedAs !== null && submittedMetric !== null
-                ? { name: submittedAs, metric: submittedMetric }
-                : null
-            }
+            player={submittedAs !== null ? { name: submittedAs } : null}
           />
         )}
       </div>

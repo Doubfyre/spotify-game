@@ -281,15 +281,14 @@ function Results({
 }) {
   const [copied, setCopied] = useState(false);
   // "pending" — show submit form; "submitted"/"skipped" — show leaderboard.
-  // submittedAs / submittedMetric reflect the row that actually exists
-  // in solo_scores for this player (may be an older, better score if
-  // the conditional upsert decided to keep it). Both are passed to
-  // HighScoreLeaderboard for the "your row" highlight.
+  // submittedAs is just the name we submitted under; the leaderboard
+  // shows MAX-per-name (computed client-side from over-fetched rows),
+  // so we highlight by name alone — the displayed "your row" may
+  // reflect a better, older submission rather than today's.
   const [submitStatus, setSubmitStatus] = useState<
     "pending" | "submitted" | "skipped"
   >("pending");
   const [submittedAs, setSubmittedAs] = useState<string | null>(null);
-  const [submittedMetric, setSubmittedMetric] = useState<number | null>(null);
   const [initialName, setInitialName] = useState<string>("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const percent = Math.round((total / MAX_POSSIBLE) * 100);
@@ -366,69 +365,17 @@ function Results({
   }, [total]);
 
   async function submitLeaderboard(name: string) {
+    // Always INSERT — every game's score is recorded as its own row.
+    // The leaderboard view aggregates MAX(score) per player_name, so a
+    // player can play many times without "losing" earlier good runs.
+    // Side benefit: no select-then-write race, no partial-unique-index
+    // upsert dance, fresh runs always succeed regardless of past play.
     const supa = createBrowserSupabase();
     const {
       data: { user },
     } = await supa.auth.getUser();
-
-    if (user?.id) {
-      // Logged-in: dedupe on user_id via select-then-update-or-insert.
-      // PostgREST upsert with onConflict can't target a partial unique
-      // index (WHERE user_id IS NOT NULL), so we drive the dedupe from
-      // the client. Race window between the read and the write is
-      // tiny in practice — one user, one browser, one click.
-      const { data: existing, error: readErr } = await supa
-        .from("solo_scores")
-        .select("player_name, score")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (readErr) {
-        console.error("[solo] solo_scores read failed", readErr);
-        throw new Error(readErr.message);
-      }
-      const existingRow = existing as
-        | { player_name: string; score: number }
-        | null;
-
-      if (existingRow) {
-        if (existingRow.score >= total) {
-          // Their stored best is already at least this good — don't
-          // overwrite. Highlight the existing row in the leaderboard.
-          setSubmittedAs(existingRow.player_name);
-          setSubmittedMetric(existingRow.score);
-          setSubmitStatus("submitted");
-          return;
-        }
-        const { error: updateErr } = await supa
-          .from("solo_scores")
-          .update({ player_name: name, score: total })
-          .eq("user_id", user.id);
-        if (updateErr) {
-          console.error("[solo] solo_scores update failed", updateErr);
-          throw new Error(updateErr.message);
-        }
-      } else {
-        const { error: insertErr } = await supa.from("solo_scores").insert({
-          user_id: user.id,
-          player_name: name,
-          score: total,
-        });
-        if (insertErr) {
-          console.error("[solo] solo_scores insert failed", insertErr);
-          throw new Error(insertErr.message);
-        }
-      }
-      setSubmittedAs(name);
-      setSubmittedMetric(total);
-      setSubmitStatus("submitted");
-      return;
-    }
-
-    // Anonymous: no user_id means no dedupe target. Insert a new row.
-    // The leaderboard views collapse duplicate player_names client-side
-    // as a best-effort fallback.
     const { error } = await supa.from("solo_scores").insert({
-      user_id: null,
+      user_id: user?.id ?? null,
       player_name: name,
       score: total,
     });
@@ -437,7 +384,6 @@ function Results({
       throw new Error(error.message);
     }
     setSubmittedAs(name);
-    setSubmittedMetric(total);
     setSubmitStatus("submitted");
   }
 
@@ -532,11 +478,7 @@ function Results({
             table="solo_scores"
             metricColumn="score"
             metricLabel="Score"
-            player={
-              submittedAs !== null && submittedMetric !== null
-                ? { name: submittedAs, metric: submittedMetric }
-                : null
-            }
+            player={submittedAs !== null ? { name: submittedAs } : null}
           />
         )}
       </div>
