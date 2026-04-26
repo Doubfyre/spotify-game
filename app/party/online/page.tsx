@@ -121,6 +121,52 @@
 //   create policy "public insert picks"  on public.party_picks    for insert with check (true);
 //
 // ---------------------------------------------------------------------
+// Stale-room cleanup. A host who closes the tab on the EndScreen leaves
+// a "finished" row plus its cascading party_players / party_picks rows
+// behind. Schedule a daily sweep that drops finished rooms older than
+// 24 hours; the FK cascades on party_players + party_picks clean up the
+// rest. Re-runnable: `cron.unschedule` with a missing job is a no-op
+// because we filter against pg_cron.cron.job first.
+//
+// REQUIRED: enable the pg_cron extension under Database → Extensions.
+// Run this block in the Supabase SQL editor:
+//
+//   create extension if not exists pg_cron;
+//
+//   create or replace function public.cleanup_stale_party_rooms()
+//   returns int
+//   language plpgsql
+//   security definer
+//   as $$
+//   declare
+//     deleted_count int;
+//   begin
+//     delete from public.party_rooms
+//     where status = 'finished'
+//       and created_at < now() - interval '24 hours';
+//     get diagnostics deleted_count = row_count;
+//     return deleted_count;
+//   end;
+//   $$;
+//
+//   -- Unschedule any prior version so this block is idempotent.
+//   select cron.unschedule(jobid)
+//   from cron.job
+//   where jobname = 'cleanup-stale-party-rooms';
+//
+//   -- Daily, 04:00 UTC (low traffic; well clear of the 22:00 UTC
+//   -- scrape and the existing Sunday-only anon cleanup).
+//   select cron.schedule(
+//     'cleanup-stale-party-rooms',
+//     '0 4 * * *',
+//     $$ select public.cleanup_stale_party_rooms(); $$
+//   );
+//
+//   -- Sanity check: confirm the job is registered and active.
+//   select jobname, schedule, active from cron.job
+//   where jobname = 'cleanup-stale-party-rooms';
+//
+// ---------------------------------------------------------------------
 // Legacy: if you previously enabled Supabase Anonymous Sign-In and have
 // `auth.users` rows with `is_anonymous = true`, clean them up once by
 // hand (they no longer serve any purpose). Then disable Anonymous

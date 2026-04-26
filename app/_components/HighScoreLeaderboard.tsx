@@ -73,15 +73,6 @@ export default function HighScoreLeaderboard({
     const today = getTodayLondon();
     const todayStartISO = londonDayStartUTC(today);
 
-    // Diagnostic log — surfaces the actual cutoff being applied so we
-    // can compare against rows in the DB. Cheap to keep around; if it
-    // becomes noise later, gate behind a debug flag.
-    console.log(`[leaderboard:${table}] fetch`, {
-      now: new Date().toISOString(),
-      today,
-      todayStartISO,
-    });
-
     const topAll = supabase
       .from(table)
       .select(`player_name, ${metricColumn}, created_at`)
@@ -117,13 +108,6 @@ export default function HighScoreLeaderboard({
 
     const allNormalised = normalise((a.data ?? []) as unknown[]);
     const todayNormalised = normalise((t.data ?? []) as unknown[]);
-
-    console.log(`[leaderboard:${table}] today result`, {
-      cutoff: todayStartISO,
-      rawRowCount: todayNormalised.length,
-      firstRow: todayNormalised[0],
-      lastRow: todayNormalised[todayNormalised.length - 1],
-    });
 
     // Dedupe runs on each result set independently. The today list
     // never sees yesterday's rows because they're filtered out at the

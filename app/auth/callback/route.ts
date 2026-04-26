@@ -16,8 +16,13 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const nextParam = url.searchParams.get("next") ?? "/";
-  // Only allow same-origin redirects — don't let an attacker pass ?next=https://evil.com.
-  const next = nextParam.startsWith("/") ? nextParam : "/";
+  // Only allow same-origin relative paths. The leading-slash check alone
+  // would still admit "//evil.com", which browsers treat as a protocol-
+  // relative cross-origin URL — reject that explicitly.
+  const next =
+    nextParam.startsWith("/") && !nextParam.startsWith("//")
+      ? nextParam
+      : "/";
 
   if (code) {
     const supabase = await createServerSupabase();

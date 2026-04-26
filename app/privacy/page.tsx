@@ -6,8 +6,7 @@ export const metadata: Metadata = {
   description: "How The Spotify Game handles your data.",
 };
 
-// Placeholders — replace with a real inbox/mailto before public launch.
-const CONTACT_EMAIL = "hello@thespotifygame.example";
+const CONTACT_EMAIL = "hello@soundbitemanagement.com";
 const LAST_UPDATED = "April 2026";
 
 export default function PrivacyPage() {

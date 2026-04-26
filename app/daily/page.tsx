@@ -20,7 +20,19 @@
 //   alter table public.daily_scores enable row level security;
 //   create policy "public read"   on public.daily_scores for select using (true);
 //   create policy "public insert" on public.daily_scores for insert with check (true);
-//   create policy "public update" on public.daily_scores for update using (true);
+//   -- Updates are scoped to the row owner: the unconditional "public update"
+//   -- policy let any client rewrite anyone's score, which is unacceptable
+//   -- once user_id is populated. This restricts UPDATE to rows the caller
+//   -- owns AND requires the post-update row to still belong to them.
+//   create policy "users update own row" on public.daily_scores
+//     for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+//
+// If you previously created the open "public update" policy, drop it
+// before applying the scoped one (idempotent if either is missing):
+//
+//   drop policy if exists "public update" on public.daily_scores;
+//   create policy "users update own row" on public.daily_scores
+//     for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 //
 //   -- Dedupe: at most one row per signed-in player per day. Partial
 //   -- index so anonymous submissions (user_id NULL) aren't constrained.
@@ -252,10 +264,6 @@ export default async function DailyPage() {
   // submitted a row for today's snapshot on any device, mark them as done
   // so the client skips straight to the results screen. Logged-out users
   // rely on the existing localStorage check in DailyChallenge.
-  //
-  // The console.log lines below show in Vercel runtime logs and let us
-  // see exactly what user/date the gate ran with and whether the row was
-  // matched. Cheap to keep — only fires per server render of /daily.
   let alreadyPlayed = false;
   let existingScore: number | null = null;
   let existingName: string | null = null;
@@ -265,11 +273,7 @@ export default async function DailyPage() {
   if (authErr) {
     console.warn("[daily-gate] auth.getUser error —", authErr.message);
   }
-  if (!user) {
-    console.log(
-      `[daily-gate] no signed-in user; falling back to localStorage gate (snapshotDate=${snapshotDate})`,
-    );
-  } else {
+  if (user) {
     // Use .limit(1) + array read instead of .maybeSingle() so the gate
     // is robust even if the partial unique index hasn't been created yet
     // and there's more than one row for this (user, day) combo.
@@ -295,13 +299,6 @@ export default async function DailyPage() {
       alreadyPlayed = true;
       existingScore = existing.score;
       existingName = existing.player_name;
-      console.log(
-        `[daily-gate] match user_id=${user.id} snapshot=${snapshotDate} score=${existing.score} → alreadyPlayed=true`,
-      );
-    } else {
-      console.log(
-        `[daily-gate] no row for user_id=${user.id} snapshot=${snapshotDate} → alreadyPlayed=false`,
-      );
     }
   }
 
