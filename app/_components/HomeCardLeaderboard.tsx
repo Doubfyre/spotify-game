@@ -30,21 +30,31 @@ const OVER_FETCH = 60;
 async function fetchForVariant(
   variant: HomeLeaderboardVariant,
 ): Promise<{ all: Row[]; today: Row[] }> {
+  // Recompute on every fetch so the today filter always reflects the
+  // current London day. Stale cutoffs from a long-open tab were
+  // letting yesterday's rows leak into the today list, and the MAX
+  // dedupe then hid today's actual best behind an older higher score.
   const snapshot = getTodayLondon();
   const todayStartISO = londonDayStartUTC(snapshot);
 
   if (variant === "solo") {
-    const base = () =>
-      supabase
-        .from("solo_scores")
-        .select("player_name, score")
-        .order("score", { ascending: false })
-        .order("created_at", { ascending: true })
-        .limit(OVER_FETCH);
-    const [a, t] = await Promise.all([
-      base(),
-      base().gte("created_at", todayStartISO),
-    ]);
+    const allTimeP = supabase
+      .from("solo_scores")
+      .select("player_name, score")
+      .order("score", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(OVER_FETCH);
+    // Filter sits ahead of order/limit so PostgREST applies the WHERE
+    // clause unambiguously. The today list is a fresh, separate query
+    // — it never sees rows older than today's London midnight.
+    const todayP = supabase
+      .from("solo_scores")
+      .select("player_name, score")
+      .gte("created_at", todayStartISO)
+      .order("score", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(OVER_FETCH);
+    const [a, t] = await Promise.all([allTimeP, todayP]);
     throwIfError(a.error, t.error);
     return {
       all: collapse(normalise(a.data as unknown[], "score"), "desc"),
@@ -52,35 +62,43 @@ async function fetchForVariant(
     };
   }
   if (variant === "higherlower") {
-    const base = () =>
-      supabase
-        .from("higher_lower_scores")
-        .select("player_name, streak")
-        .order("streak", { ascending: false })
-        .order("created_at", { ascending: true })
-        .limit(OVER_FETCH);
-    const [a, t] = await Promise.all([
-      base(),
-      base().gte("created_at", todayStartISO),
-    ]);
+    const allTimeP = supabase
+      .from("higher_lower_scores")
+      .select("player_name, streak")
+      .order("streak", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(OVER_FETCH);
+    const todayP = supabase
+      .from("higher_lower_scores")
+      .select("player_name, streak")
+      .gte("created_at", todayStartISO)
+      .order("streak", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(OVER_FETCH);
+    const [a, t] = await Promise.all([allTimeP, todayP]);
     throwIfError(a.error, t.error);
     return {
       all: collapse(normalise(a.data as unknown[], "streak"), "desc"),
       today: collapse(normalise(t.data as unknown[], "streak"), "desc"),
     };
   }
-  // daily
-  const base = () =>
-    supabase
-      .from("daily_scores")
-      .select("player_name, score")
-      .order("score", { ascending: true })
-      .order("created_at", { ascending: true })
-      .limit(OVER_FETCH);
-  const [a, t] = await Promise.all([
-    base(),
-    base().eq("snapshot_date", snapshot),
-  ]);
+  // daily — filter on snapshot_date (a date column), not created_at.
+  // Each daily submission is keyed to the London day it covers, so
+  // this naturally scopes the today list to today's challenge.
+  const allTimeP = supabase
+    .from("daily_scores")
+    .select("player_name, score")
+    .order("score", { ascending: true })
+    .order("created_at", { ascending: true })
+    .limit(OVER_FETCH);
+  const todayP = supabase
+    .from("daily_scores")
+    .select("player_name, score")
+    .eq("snapshot_date", snapshot)
+    .order("score", { ascending: true })
+    .order("created_at", { ascending: true })
+    .limit(OVER_FETCH);
+  const [a, t] = await Promise.all([allTimeP, todayP]);
   throwIfError(a.error, t.error);
   return {
     all: collapse(normalise(a.data as unknown[], "score"), "asc"),

@@ -10,7 +10,7 @@
 // which is lower-is-better and keyed on snapshot_date rather than a
 // raw created_at cutoff.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { getTodayLondon, londonDayStartUTC } from "@/lib/dates";
 
@@ -65,23 +65,22 @@ export default function HighScoreLeaderboard({
   const [todayRows, setTodayRows] = useState<Row[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const todayStartISO = useMemo(
-    () => londonDayStartUTC(getTodayLondon()),
-    [],
-  );
-
   const fetchAll = useCallback(async () => {
-    // Two queries in parallel: top-N raw rows for the all-time and
-    // today views. The exact "where am I in the rank" line we used to
-    // show is gone — counting raw rows after always-INSERT no longer
-    // matches the deduped leaderboard's notion of rank, and a true
-    // GROUP BY-based rank would need a Postgres view we don't have.
+    // Recompute the London-midnight cutoff every poll. Caching it via
+    // useMemo([]) caused yesterday's rows to leak into "today" once the
+    // tab sat across midnight — and then dedupeByName picked the higher
+    // metric, hiding today's actual run behind an older record.
+    const todayStartISO = londonDayStartUTC(getTodayLondon());
+
     const topAll = supabase
       .from(table)
       .select(`player_name, ${metricColumn}, created_at`)
       .order(metricColumn, { ascending: false })
       .order("created_at", { ascending: true }) // ties: earliest wins
       .limit(OVER_FETCH);
+    // Today fetch: filter BEFORE order/limit so PostgREST applies the
+    // WHERE clause first. Same query as topAll but scoped to rows
+    // created on or after the current London day's start.
     const topToday = supabase
       .from(table)
       .select(`player_name, ${metricColumn}, created_at`)
@@ -106,9 +105,12 @@ export default function HighScoreLeaderboard({
         created_at: String(r.created_at ?? ""),
       }));
 
+    // Dedupe runs on each result set independently. The today list
+    // never sees yesterday's rows because they're filtered out at the
+    // query level — dedupeByName here only collapses today's MAX.
     setAllRows(dedupeByName(normalise((a.data ?? []) as unknown[])));
     setTodayRows(dedupeByName(normalise((t.data ?? []) as unknown[])));
-  }, [table, metricColumn, todayStartISO]);
+  }, [table, metricColumn]);
 
   useEffect(() => {
     fetchAll();
