@@ -70,7 +70,17 @@ export default function HighScoreLeaderboard({
     // useMemo([]) caused yesterday's rows to leak into "today" once the
     // tab sat across midnight — and then dedupeByName picked the higher
     // metric, hiding today's actual run behind an older record.
-    const todayStartISO = londonDayStartUTC(getTodayLondon());
+    const today = getTodayLondon();
+    const todayStartISO = londonDayStartUTC(today);
+
+    // Diagnostic log — surfaces the actual cutoff being applied so we
+    // can compare against rows in the DB. Cheap to keep around; if it
+    // becomes noise later, gate behind a debug flag.
+    console.log(`[leaderboard:${table}] fetch`, {
+      now: new Date().toISOString(),
+      today,
+      todayStartISO,
+    });
 
     const topAll = supabase
       .from(table)
@@ -105,11 +115,21 @@ export default function HighScoreLeaderboard({
         created_at: String(r.created_at ?? ""),
       }));
 
+    const allNormalised = normalise((a.data ?? []) as unknown[]);
+    const todayNormalised = normalise((t.data ?? []) as unknown[]);
+
+    console.log(`[leaderboard:${table}] today result`, {
+      cutoff: todayStartISO,
+      rawRowCount: todayNormalised.length,
+      firstRow: todayNormalised[0],
+      lastRow: todayNormalised[todayNormalised.length - 1],
+    });
+
     // Dedupe runs on each result set independently. The today list
     // never sees yesterday's rows because they're filtered out at the
     // query level — dedupeByName here only collapses today's MAX.
-    setAllRows(dedupeByName(normalise((a.data ?? []) as unknown[])));
-    setTodayRows(dedupeByName(normalise((t.data ?? []) as unknown[])));
+    setAllRows(dedupeByName(allNormalised));
+    setTodayRows(dedupeByName(todayNormalised));
   }, [table, metricColumn]);
 
   useEffect(() => {

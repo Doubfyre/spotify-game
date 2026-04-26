@@ -37,6 +37,14 @@ async function fetchForVariant(
   const snapshot = getTodayLondon();
   const todayStartISO = londonDayStartUTC(snapshot);
 
+  // Diagnostic log — surfaces the actual cutoff so we can verify
+  // against rows in the DB when the today list looks wrong.
+  console.log(`[home-leaderboard:${variant}] fetch`, {
+    now: new Date().toISOString(),
+    snapshot,
+    todayStartISO,
+  });
+
   if (variant === "solo") {
     const allTimeP = supabase
       .from("solo_scores")
@@ -174,6 +182,11 @@ export default function HomeCardLeaderboard({
     (async () => {
       try {
         const { all, today } = await fetchForVariant(variant);
+        console.log(`[home-leaderboard:${variant}] result`, {
+          allCount: all.length,
+          todayCount: today.length,
+          firstToday: today[0],
+        });
         setAllRows(all);
         setTodayRows(today);
       } catch (e) {
