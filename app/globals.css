@@ -260,6 +260,31 @@ body::before {
   animation: hl-checkmark 700ms ease-out both;
 }
 
+/* The ✗ overlay that pops on the wrong-picked card. Mirrors the
+   checkmark shape — colour comes from `text-red` (#ff4444) on the
+   element so the keyframe stays purely transform/opacity. */
+@keyframes hl-crossmark {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+.animate-hl-crossmark {
+  animation: hl-crossmark 700ms ease-out both;
+}
+
 /* Dim the non-celebration card so the eye lands on the green flash. */
 @keyframes hl-dim {
   from {

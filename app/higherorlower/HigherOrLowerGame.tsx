@@ -380,13 +380,18 @@ function Card({
 
   // Celebrate only on a true correct guess (player picked AND it was the
   // higher side). Dim the loser card so the green flash carries the eye.
+  // On a wrong guess we still nudge the eye toward the correct (unpicked)
+  // card with the same green pulse — purely informational, not celebratory.
   const celebrate = revealed && wasCorrectSide && wasPicked;
+  const wrongPick = revealed && !wasCorrectSide && wasPicked;
+  const correctReveal = revealed && wasCorrectSide && !wasPicked;
   const dim = revealed && !wasCorrectSide && !wasPicked;
-  const animClass = celebrate
-    ? "animate-hl-correct"
-    : dim
-      ? "animate-hl-dim"
-      : "";
+  const animClass =
+    celebrate || correctReveal
+      ? "animate-hl-correct"
+      : dim
+        ? "animate-hl-dim"
+        : "";
 
   return (
     <button
@@ -415,6 +420,15 @@ function Card({
           style={{ fontSize: "clamp(80px, 16vw, 160px)", lineHeight: 1 }}
         >
           ✓
+        </span>
+      )}
+      {wrongPick && (
+        <span
+          aria-hidden
+          className="animate-hl-crossmark pointer-events-none absolute top-1/2 left-1/2 font-display text-red"
+          style={{ fontSize: "clamp(80px, 16vw, 160px)", lineHeight: 1 }}
+        >
+          ✗
         </span>
       )}
     </button>
