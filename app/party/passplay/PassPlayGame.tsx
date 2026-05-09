@@ -7,6 +7,9 @@ import { fuzzyFind } from "@/lib/fuzzy";
 import { pointsForRank } from "@/lib/scoring";
 import { trackEvent } from "@/lib/tracking";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
+import PlayerScorecard, {
+  type ScorecardPick,
+} from "@/app/_components/PlayerScorecard";
 
 type Player = {
   id: string;
@@ -687,6 +690,7 @@ function GameOverScreen({
   const winner = sorted[0];
   // Handle perfect-tie: if top two have the same score, show both names.
   const tiedWinners = sorted.filter((p) => p.score === winner.score);
+  const winnerIds = new Set(tiedWinners.map((p) => p.id));
 
   return (
     <main className="flex-1 flex items-center justify-center px-5 sm:px-10 pt-32 pb-16">
@@ -712,8 +716,24 @@ function GameOverScreen({
           </div>
         </div>
 
-        <div className="mt-10">
-          <StandingsList players={players} highlightId={null} />
+        <div className="mt-10 space-y-3">
+          {sorted.map((p, i) => {
+            const cardPicks: ScorecardPick[] = p.picks.map((pk) => ({
+              artistName: pk.matched?.artist_name ?? null,
+              rank: pk.matched?.rank ?? null,
+              points: pk.points,
+            }));
+            return (
+              <PlayerScorecard
+                key={p.id}
+                name={p.name}
+                score={p.score}
+                rank={i + 1}
+                isWinner={winnerIds.has(p.id)}
+                picks={cardPicks}
+              />
+            );
+          })}
         </div>
 
         <div className="mt-10 flex flex-col sm:flex-row gap-3">

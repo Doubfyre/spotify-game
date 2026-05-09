@@ -40,6 +40,9 @@ import type { ArtistRow } from "@/lib/supabase";
 import { fuzzyFind } from "@/lib/fuzzy";
 import { pointsForRank } from "@/lib/scoring";
 import { trackEvent } from "@/lib/tracking";
+import PlayerScorecard, {
+  type ScorecardPick,
+} from "@/app/_components/PlayerScorecard";
 
 // ============================================================
 // Types
@@ -651,7 +654,6 @@ function OnlinePartyInner({
       room={room}
       players={players}
       picks={picks}
-      me={myPlayer}
       isHost={isHost}
       onPlayAgain={handlePlayAgain}
       onEndParty={handleEndParty}
@@ -1312,7 +1314,7 @@ function Standings({
 function EndScreen({
   room,
   players,
-  me,
+  picks,
   isHost,
   onPlayAgain,
   onEndParty,
@@ -1321,7 +1323,6 @@ function EndScreen({
   room: Room;
   players: PartyPlayer[];
   picks: PartyPick[];
-  me: PartyPlayer;
   isHost: boolean;
   onPlayAgain: () => void;
   onEndParty: () => void;
@@ -1330,6 +1331,19 @@ function EndScreen({
   const sorted = [...players].sort((a, b) => b.score - a.score);
   const winner = sorted[0];
   const tiedWinners = sorted.filter((p) => p.score === winner.score);
+  const winnerIds = new Set(tiedWinners.map((p) => p.id));
+
+  // Group picks by player_id and order each player's picks by round
+  // so the scorecards read top-to-bottom in play order.
+  const picksByPlayer = new Map<string, PartyPick[]>();
+  for (const pk of picks) {
+    const arr = picksByPlayer.get(pk.player_id) ?? [];
+    arr.push(pk);
+    picksByPlayer.set(pk.player_id, arr);
+  }
+  for (const arr of picksByPlayer.values()) {
+    arr.sort((a, b) => a.round - b.round);
+  }
 
   return (
     <main className="flex-1 flex items-center justify-center px-5 sm:px-10 pt-32 pb-16">
@@ -1355,8 +1369,26 @@ function EndScreen({
           </div>
         </div>
 
-        <div className="mt-10">
-          <Standings players={players} activePlayerId={null} meId={me.id} />
+        <div className="mt-10 space-y-3">
+          {sorted.map((p, i) => {
+            const cardPicks: ScorecardPick[] = (picksByPlayer.get(p.id) ?? []).map(
+              (pk) => ({
+                artistName: pk.artist_name,
+                rank: pk.rank,
+                points: pk.points,
+              }),
+            );
+            return (
+              <PlayerScorecard
+                key={p.id}
+                name={p.display_name}
+                score={p.score}
+                rank={i + 1}
+                isWinner={winnerIds.has(p.id)}
+                picks={cardPicks}
+              />
+            );
+          })}
         </div>
 
         <div className="mt-10 flex flex-col sm:flex-row gap-3">
