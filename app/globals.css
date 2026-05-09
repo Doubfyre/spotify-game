@@ -216,6 +216,80 @@ body::before {
   opacity: 1;
 }
 
+/* Higher-or-Lower correct-pick celebration. Quick scale-up + green
+   tint pulse on the picked card. Pairs with the checkmark overlay
+   (animate-hl-checkmark) for a single ~500ms reward beat. */
+@keyframes hl-correct-flash {
+  0% {
+    transform: scale(1);
+    background-color: rgba(31, 223, 100, 0.12);
+  }
+  40% {
+    transform: scale(1.05);
+    background-color: rgba(31, 223, 100, 0.28);
+  }
+  100% {
+    transform: scale(1);
+    background-color: rgba(31, 223, 100, 0.12);
+  }
+}
+.animate-hl-correct {
+  animation: hl-correct-flash 500ms ease-out both;
+}
+
+/* The ✓ overlay that pops in the centre of the correct card. */
+@keyframes hl-checkmark {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+.animate-hl-checkmark {
+  animation: hl-checkmark 700ms ease-out both;
+}
+
+/* Dim the non-celebration card so the eye lands on the green flash. */
+@keyframes hl-dim {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+.animate-hl-dim {
+  animation: hl-dim 350ms ease-out both;
+}
+
+/* Streak commentary fade-in. Triggered via React `key` on the message
+   span — re-mounting fires the animation each time the milestone
+   line changes. */
+@keyframes hl-comment-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-hl-comment {
+  animation: hl-comment-in 350ms ease-out both;
+}
+
 /* Reusable animation classes */
 .animate-pulse-dot {
   animation: pulse-dot 2s ease-in-out infinite;

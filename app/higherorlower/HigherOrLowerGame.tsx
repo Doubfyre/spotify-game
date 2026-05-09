@@ -24,6 +24,20 @@ function formatListeners(n: number): string {
   return n.toLocaleString();
 }
 
+// Streak milestones nudge the player with a short reaction line under
+// the streak counter. Returns null below the first milestone — keeps the
+// HUD quiet for the very first guess.
+function streakComment(streak: number): string | null {
+  if (streak >= 20) return "GOAT status 🐐";
+  if (streak >= 15) return "Legendary 👑";
+  if (streak >= 10) return "Are you even human?!";
+  if (streak >= 7) return "Seriously impressive";
+  if (streak >= 5) return "Unstoppable!";
+  if (streak >= 3) return "On a roll 🔥";
+  if (streak >= 2) return "Nice start!";
+  return null;
+}
+
 type Phase = "play" | "reveal" | "over";
 type Side = "left" | "right";
 
@@ -145,7 +159,7 @@ export default function HigherOrLowerGame({
       } else {
         setPhase("over");
       }
-    }, 1400);
+    }, 900);
   }
 
   // Save best streak whenever the game ends. Writes to localStorage
@@ -288,21 +302,35 @@ function TopBar({
   streak: number;
   best: number;
 }) {
+  const comment = streakComment(streak);
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex items-start justify-between gap-3">
       <Link
         href="/"
-        className="font-mono text-[11px] tracking-[2px] uppercase text-muted hover:text-foreground transition shrink-0"
+        className="font-mono text-[11px] tracking-[2px] uppercase text-muted hover:text-foreground transition shrink-0 mt-2"
       >
         ← Back
       </Link>
-      <div className="flex items-center gap-6">
+      <div className="flex items-start gap-6">
         <div className="text-center">
           <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted">
             Streak
           </div>
           <div className="font-display text-3xl sm:text-4xl leading-none text-spotify tabular-nums">
             {streak}
+          </div>
+          {/* Reserve a fixed-height row so the column doesn't jump as the
+              comment appears/changes. The `key` re-mounts the span on
+              each milestone change so the fade-in fires fresh. */}
+          <div className="h-4 mt-1.5 flex items-center justify-center">
+            {comment && (
+              <span
+                key={comment}
+                className="animate-hl-comment font-mono text-[10px] tracking-[2px] uppercase text-spotify-dim"
+              >
+                {comment}
+              </span>
+            )}
           </div>
         </div>
         <div className="text-center">
@@ -314,7 +342,7 @@ function TopBar({
           </div>
         </div>
       </div>
-      <span className="hidden sm:inline font-mono text-[11px] tracking-[2px] uppercase text-muted shrink-0">
+      <span className="hidden sm:inline font-mono text-[11px] tracking-[2px] uppercase text-muted shrink-0 mt-2">
         {snapshotDate}
       </span>
     </div>
@@ -350,12 +378,22 @@ function Card({
     }
   }
 
+  // Celebrate only on a true correct guess (player picked AND it was the
+  // higher side). Dim the loser card so the green flash carries the eye.
+  const celebrate = revealed && wasCorrectSide && wasPicked;
+  const dim = revealed && !wasCorrectSide && !wasPicked;
+  const animClass = celebrate
+    ? "animate-hl-correct"
+    : dim
+      ? "animate-hl-dim"
+      : "";
+
   return (
     <button
       type="button"
       onClick={onPick}
       disabled={phase !== "play"}
-      className={`relative bg-surface border rounded-lg transition-colors duration-200 flex flex-col items-center justify-center p-4 sm:p-6 text-center overflow-hidden ${stateClasses} ${
+      className={`relative bg-surface border rounded-lg transition-colors duration-200 flex flex-col items-center justify-center p-4 sm:p-6 text-center overflow-hidden ${stateClasses} ${animClass} ${
         phase === "play" ? "cursor-pointer" : "cursor-default"
       }`}
     >
@@ -370,6 +408,15 @@ function Card({
       >
         {artist.artist_name}
       </div>
+      {celebrate && (
+        <span
+          aria-hidden
+          className="animate-hl-checkmark pointer-events-none absolute top-1/2 left-1/2 font-display text-spotify"
+          style={{ fontSize: "clamp(80px, 16vw, 160px)", lineHeight: 1 }}
+        >
+          ✓
+        </span>
+      )}
     </button>
   );
 }
