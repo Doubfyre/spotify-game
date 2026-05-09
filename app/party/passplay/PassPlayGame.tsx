@@ -538,13 +538,21 @@ function GuessScreen({
             placeholder="e.g. Taylor Swift"
             className="focus-green w-full rounded-2xl bg-surface border border-border px-5 py-4 text-lg text-foreground placeholder:text-muted/60 transition"
           />
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={input.trim().length === 0}
+            className="mt-3 w-full bg-spotify text-background font-bold text-[15px] tracking-[0.5px] px-8 py-3 rounded-[4px] min-h-[44px] transition hover:-translate-y-px hover:bg-spotify-bright disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+          >
+            Guess →
+          </button>
           {dupError ? (
             <div className="font-mono text-[11px] tracking-[1px] uppercase text-amber mt-3">
               {dupError}
             </div>
           ) : (
             <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mt-3">
-              Press Enter to submit · spelling is forgiving · no retries
+              Spelling is forgiving · no retries
             </div>
           )}
         </div>

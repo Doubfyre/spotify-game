@@ -1148,13 +1148,21 @@ function ActiveScreen({
               placeholder="e.g. Taylor Swift"
               className="focus-green w-full rounded-2xl bg-surface border border-border px-5 py-4 text-lg text-foreground placeholder:text-muted/60 transition disabled:opacity-60"
             />
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting || input.trim().length === 0}
+              className="mt-3 w-full bg-spotify text-background font-bold text-[15px] tracking-[0.5px] px-8 py-3 rounded-[4px] min-h-[44px] transition hover:-translate-y-px hover:bg-spotify-bright disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            >
+              {submitting ? "Submitting…" : "Guess →"}
+            </button>
             {turnError ? (
               <div className="font-mono text-[10px] tracking-[2px] uppercase text-red mt-3">
                 {turnError}
               </div>
             ) : (
               <div className="font-mono text-[10px] tracking-[2px] uppercase text-muted mt-3">
-                Press Enter · 60 seconds per turn · spelling is forgiving
+                60 seconds per turn · spelling is forgiving
               </div>
             )}
           </div>
