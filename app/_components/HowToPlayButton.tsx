@@ -33,6 +33,11 @@ const SECTIONS: Section[] = [
     title: "PARTY MODE",
     body: "Two to eight players. Pass & Play uses one device - take turns and hand the phone over. Online gives everyone their own device via a room code. Once an artist is guessed, they're gone for the rest of the party. Highest cumulative score wins.",
   },
+  {
+    num: "05",
+    title: "HIGHER OR LOWER",
+    body: "Two artists appear side by side. Pick which one has more monthly listeners on Spotify. Get it right and your streak grows. Get it wrong and the game ends. There's no time limit and no hints - just your music knowledge. Artists are drawn from the full Spotify top 500. How far can you go?",
+  },
 ];
 
 export default function HowToPlayButton() {
