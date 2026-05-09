@@ -32,12 +32,59 @@ export function prefillName(email: string | null | undefined): string {
   return "";
 }
 
+/**
+ * Returns the player's cached display name (or null) without falling
+ * back to email. Used by the game-end screens to detect "have we got a
+ * stored name we should auto-submit under?" — the email-fallback in
+ * prefillName would auto-submit signed-in users under their email
+ * local-part on first play, which they'd rather choose explicitly.
+ */
+export function readCachedLeaderboardName(): string | null {
+  try {
+    const raw = localStorage.getItem(LS_LEADERBOARD_NAME);
+    if (!raw) return null;
+    const trimmed = raw.trim().slice(0, MAX_NAME_LEN);
+    return trimmed.length > 0 ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
 export function cacheLeaderboardName(name: string) {
   try {
     localStorage.setItem(LS_LEADERBOARD_NAME, name);
   } catch {
     // localStorage disabled — fine
   }
+}
+
+/**
+ * Confirmation strip shown after a successful submit. Includes a
+ * "Change name" link that should flip the parent back to the form so
+ * the player can pick a different display name and resubmit.
+ */
+export function LeaderboardSubmittedBanner({
+  name,
+  onChangeName,
+}: {
+  name: string;
+  onChangeName: () => void;
+}) {
+  return (
+    <section className="mt-10 bg-surface border border-border rounded-lg p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+      <div className="flex-1 text-foreground text-sm leading-snug">
+        Score submitted as{" "}
+        <span className="text-spotify font-medium">{name}</span>
+      </div>
+      <button
+        type="button"
+        onClick={onChangeName}
+        className="font-mono text-[10px] tracking-[2px] uppercase text-muted hover:text-foreground transition self-start sm:self-auto"
+      >
+        Change name
+      </button>
+    </section>
+  );
 }
 
 export default function LeaderboardSubmitForm({

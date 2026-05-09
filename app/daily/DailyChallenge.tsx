@@ -7,7 +7,9 @@ import { getTodayLondon } from "@/lib/dates";
 import { trackEvent } from "@/lib/tracking";
 import {
   cacheLeaderboardName,
+  LeaderboardSubmittedBanner,
   prefillName,
+  readCachedLeaderboardName,
 } from "@/app/_components/LeaderboardSubmitForm";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
 
@@ -403,6 +405,9 @@ function Results({
   // state lives in localStorage so they can reopen the page and still see
   // their score — they just won't be on the leaderboard.
   const [skippedSubmit, setSkippedSubmit] = useState(false);
+  // True after the player clicks "Change name" on the submitted banner.
+  // Forces the form back open even though completed.submittedAs is set.
+  const [editingName, setEditingName] = useState(false);
 
   const submittedAs = completed.submittedAs;
   const playerScore = completed.total;
@@ -548,10 +553,12 @@ function Results({
     }
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitErr(null);
-    const clean = name.trim();
+  // Core submit logic, callable both from the form (via `submit`) and
+  // from the auto-submit effect with a cached name. Validates the
+  // input, resolves the user, runs the dedupe-aware write, and on
+  // success caches the name + notifies the parent.
+  async function doSubmit(targetName: string): Promise<void> {
+    const clean = targetName.trim();
     if (!clean) {
       setSubmitErr("Enter a name to submit.");
       return;
@@ -611,6 +618,7 @@ function Results({
           cacheLeaderboardName(clean);
           onSubmitted(clean);
           fetchLeaderboard();
+          setEditingName(false);
           return;
         }
         const { error: updateErr } = await supabase
@@ -649,6 +657,43 @@ function Results({
     cacheLeaderboardName(clean);
     onSubmitted(clean);
     fetchLeaderboard();
+    // Editing-name session resolved — back to banner mode.
+    setEditingName(false);
+  }
+
+  // Thin wrapper kept on the form's onSubmit so we don't lose the
+  // preventDefault. Reads from the input's `name` state.
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitErr(null);
+    await doSubmit(name);
+  }
+
+  // Auto-submit on mount when there's a cached display name and we
+  // haven't already submitted (e.g. cross-device replay path or a
+  // skipped form). One-shot via ref to dodge Strict Mode double-fire.
+  const autoSubmitRan = useRef(false);
+  useEffect(() => {
+    if (autoSubmitRan.current) return;
+    autoSubmitRan.current = true;
+    if (submittedAs) return; // already on the leaderboard
+    if (skippedSubmit) return;
+    const cached = readCachedLeaderboardName();
+    if (!cached) return;
+    void doSubmit(cached).catch((err) => {
+      console.error("[daily] auto-submit failed", err);
+    });
+    // Intentional empty deps — fire exactly once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function changeName() {
+    // Reopen the form pre-filled with the just-used name. We can't
+    // unset the parent's completed.submittedAs (no setter exposed),
+    // so editingName is the override flag — see render below.
+    if (submittedAs) setName(submittedAs);
+    setSkippedSubmit(false);
+    setEditingName(true);
   }
 
   return (
@@ -712,11 +757,20 @@ function Results({
             Leaderboard
           </div>
 
-          {completed.submittedAs ? (
+          {completed.submittedAs && !editingName ? (
             <div className="bg-surface border border-border rounded-lg p-5 mb-5">
-              <div className="font-mono text-[11px] tracking-[2px] uppercase text-muted">
-                Submitted as{" "}
-                <span className="text-spotify">{completed.submittedAs}</span>
+              <div className="flex items-start justify-between gap-3">
+                <div className="font-mono text-[11px] tracking-[2px] uppercase text-muted">
+                  Submitted as{" "}
+                  <span className="text-spotify">{completed.submittedAs}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={changeName}
+                  className="font-mono text-[10px] tracking-[2px] uppercase text-muted hover:text-foreground transition shrink-0"
+                >
+                  Change name
+                </button>
               </div>
               {playerRank !== null && totalPlayers !== null && (
                 <div className="mt-2 text-foreground">
@@ -729,7 +783,7 @@ function Results({
                 </div>
               )}
             </div>
-          ) : skippedSubmit ? null : (
+          ) : !editingName && skippedSubmit ? null : (
             <form
               onSubmit={submit}
               className="bg-surface border border-border rounded-lg p-5 mb-5"

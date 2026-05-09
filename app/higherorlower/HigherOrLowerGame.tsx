@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase";
 import { trackEvent } from "@/lib/tracking";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
 import HighScoreLeaderboard from "@/app/_components/HighScoreLeaderboard";
 import LeaderboardSubmitForm, {
+  LeaderboardSubmittedBanner,
   prefillName,
+  readCachedLeaderboardName,
 } from "@/app/_components/LeaderboardSubmitForm";
 import {
   buildPairs,
@@ -392,9 +394,11 @@ function GameOver({
   const [copied, setCopied] = useState(false);
   // Leaderboard submit state lives here so GameOver is self-contained;
   // it unmounts on Play Again and remounts on the next game-over.
+  // "form" — show submit form; "submitted" — auto- or manually-
+  // submitted, banner + leaderboard; "skipped" — leaderboard only.
   const [submitStatus, setSubmitStatus] = useState<
-    "pending" | "submitted" | "skipped"
-  >("pending");
+    "form" | "submitted" | "skipped"
+  >("form");
   const [submittedAs, setSubmittedAs] = useState<string | null>(null);
   const [initialName, setInitialName] = useState<string>("");
   const isNewBest = streak > 0 && streak >= best;
@@ -436,6 +440,29 @@ function GameOver({
     }
     setSubmittedAs(name);
     setSubmitStatus("submitted");
+  }
+
+  // Auto-submit when a cached display name is on hand. Gated on
+  // streak > 0 (matches the form gate below — pointless leaderboard
+  // entries for 0-streak runs aren't worth the row). Strict-Mode
+  // double-fire guard via ref.
+  const autoSubmitRan = useRef(false);
+  useEffect(() => {
+    if (autoSubmitRan.current) return;
+    autoSubmitRan.current = true;
+    if (streak <= 0) return;
+    const cached = readCachedLeaderboardName();
+    if (!cached) return;
+    void submitLeaderboard(cached).catch((err) => {
+      console.error("[hol] auto-submit failed", err);
+      setSubmitStatus("form");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function changeName() {
+    setInitialName(submittedAs ?? prefillName(null));
+    setSubmitStatus("form");
   }
   // Only show the final pairing reveal if the game actually ended on a
   // wrong guess (i.e. we know which side was correct). Ending from deck
@@ -530,14 +557,21 @@ function GameOver({
           </div>
         </div>
 
-        {streak > 0 && submitStatus === "pending" ? (
+        {streak > 0 && submitStatus === "form" && (
           <LeaderboardSubmitForm
             initialName={initialName}
             metricLabel="streak"
             onSubmit={submitLeaderboard}
             onSkip={() => setSubmitStatus("skipped")}
           />
-        ) : (
+        )}
+        {submitStatus === "submitted" && submittedAs !== null && (
+          <LeaderboardSubmittedBanner
+            name={submittedAs}
+            onChangeName={changeName}
+          />
+        )}
+        {(streak === 0 || submitStatus !== "form") && (
           <HighScoreLeaderboard
             table="higher_lower_scores"
             metricColumn="streak"

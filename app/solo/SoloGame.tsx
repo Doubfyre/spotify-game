@@ -9,7 +9,9 @@ import { trackEvent } from "@/lib/tracking";
 import ArtistAvatar from "@/app/_components/ArtistAvatar";
 import HighScoreLeaderboard from "@/app/_components/HighScoreLeaderboard";
 import LeaderboardSubmitForm, {
+  LeaderboardSubmittedBanner,
   prefillName,
+  readCachedLeaderboardName,
 } from "@/app/_components/LeaderboardSubmitForm";
 
 const TOTAL_ROUNDS = 5;
@@ -284,14 +286,13 @@ function Results({
   onReset: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  // "pending" — show submit form; "submitted"/"skipped" — show leaderboard.
-  // submittedAs is just the name we submitted under; the leaderboard
-  // shows MAX-per-name (computed client-side from over-fetched rows),
-  // so we highlight by name alone — the displayed "your row" may
-  // reflect a better, older submission rather than today's.
+  // "form" — show submit form; "submitted" — auto- or manually-submitted,
+  // banner + leaderboard; "skipped" — leaderboard without highlight.
+  // submittedAs is the name the row was filed under (drives the
+  // banner + the leaderboard's "your row" highlight).
   const [submitStatus, setSubmitStatus] = useState<
-    "pending" | "submitted" | "skipped"
-  >("pending");
+    "form" | "submitted" | "skipped"
+  >("form");
   const [submittedAs, setSubmittedAs] = useState<string | null>(null);
   const [initialName, setInitialName] = useState<string>("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -302,6 +303,35 @@ function Results({
   useEffect(() => {
     void trackEvent("solo_complete");
   }, []);
+
+  // Auto-submit if the player has a cached display name from a prior
+  // session. Skips the form entirely; the banner below offers a
+  // "Change name" link to reopen the form for the rare case they want
+  // to file this run under a different handle.
+  //
+  // Guarded by a ref so the auto-submit fires exactly once even if
+  // React Strict Mode double-invokes the mount effect in dev.
+  const autoSubmitRan = useRef(false);
+  useEffect(() => {
+    if (autoSubmitRan.current) return;
+    autoSubmitRan.current = true;
+    const cached = readCachedLeaderboardName();
+    if (!cached) return;
+    void submitLeaderboard(cached).catch((err) => {
+      // Auto-submit failed — fall back to showing the form so the
+      // user can retry manually with whatever name they like.
+      console.error("[solo] auto-submit failed", err);
+      setSubmitStatus("form");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function changeName() {
+    // Re-open the form, pre-filled with the name we just used so the
+    // typical edit ("alice" → "alice2") is one keystroke away.
+    setInitialName(submittedAs ?? prefillName(null));
+    setSubmitStatus("form");
+  }
 
   // Save personal best (unconditional) + resolve the current user so we
   // can pre-fill the submit form. The public solo_scores insert happens
@@ -470,14 +500,21 @@ function Results({
           </div>
         </div>
 
-        {submitStatus === "pending" ? (
+        {submitStatus === "form" && (
           <LeaderboardSubmitForm
             initialName={initialName}
             metricLabel="score"
             onSubmit={submitLeaderboard}
             onSkip={skipLeaderboard}
           />
-        ) : (
+        )}
+        {submitStatus === "submitted" && submittedAs !== null && (
+          <LeaderboardSubmittedBanner
+            name={submittedAs}
+            onChangeName={changeName}
+          />
+        )}
+        {submitStatus !== "form" && (
           <HighScoreLeaderboard
             table="solo_scores"
             metricColumn="score"
